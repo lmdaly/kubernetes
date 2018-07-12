@@ -38,6 +38,7 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/checkpointmanager/errors"
 	"k8s.io/kubernetes/pkg/kubelet/cm/devicemanager/checkpoint"
 	"k8s.io/kubernetes/pkg/kubelet/config"
+	"k8s.io/kubernetes/pkg/kubelet/cm/numamanager"
 	"k8s.io/kubernetes/pkg/kubelet/lifecycle"
 	"k8s.io/kubernetes/pkg/kubelet/metrics"
 	watcher "k8s.io/kubernetes/pkg/kubelet/util/pluginwatcher"
@@ -138,7 +139,19 @@ func newManagerImpl(socketPath string) (*ManagerImpl, error) {
 	return manager, nil
 }
 
-func (m *ManagerImpl) genericDeviceUpdateCallback(resourceName string, devices []pluginapi.Device) {
+func (m *ManagerImpl) GetNUMAHints(pod v1.Pod, container v1.Container) numamanager.NumaMask {
+	//For testing purposes - manager should consult available resources and make numa mask based on container request
+	var nm []int64
+	nm = append(nm, 01)
+	glog.Infof("[devicemanager] NUMA Affinities for pod, container %v %v are %v", string(pod.UID), container.Name, nm)
+	return numamanager.NumaMask{
+		  Mask:           nm,
+		  Affinity:       true,
+	}
+}
+
+func (m *ManagerImpl) genericDeviceUpdateCallback(resourceName string, added, updated, deleted []pluginapi.Device) {
+	kept := append(updated, added...)
 	m.mutex.Lock()
 	m.healthyDevices[resourceName] = sets.NewString()
 	m.unhealthyDevices[resourceName] = sets.NewString()

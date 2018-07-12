@@ -20,11 +20,16 @@ import (
 	"k8s.io/api/core/v1"
 	"k8s.io/klog"
 	"k8s.io/kubernetes/pkg/kubelet/cm/cpumanager/state"
+	"k8s.io/kubernetes/pkg/kubelet/cm/numamanager"
 	"k8s.io/kubernetes/pkg/kubelet/status"
 )
 
 type fakeManager struct {
 	state state.State
+}
+
+func(m *fakeManager) GetAffinity() numamanager.Store {
+       return nil
 }
 
 func (m *fakeManager) Start(activePods ActivePodsFunc, podStatusProvider status.PodStatusProvider, containerRuntime runtimeService) {
@@ -44,6 +49,11 @@ func (m *fakeManager) AddContainer(pod *v1.Pod, container *v1.Container, contain
 func (m *fakeManager) RemoveContainer(containerID string) error {
 	klog.Infof("[fake cpumanager] RemoveContainer (container id: %s)", containerID)
 	return nil
+}
+
+func (m *fakeManager) GetNUMAHints(pod v1.Pod,  container v1.Container) numamanager.NumaMask {
+       glog.Infof("[fake cpumanager] Get NUMA Hints")
+       return numamanager.NumaMask{}
 }
 
 func (m *fakeManager) State() state.Reader {

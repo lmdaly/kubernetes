@@ -26,6 +26,7 @@ import (
 	podresourcesapi "k8s.io/kubernetes/pkg/kubelet/apis/podresources/v1alpha1"
 	"k8s.io/kubernetes/pkg/kubelet/config"
 	kubecontainer "k8s.io/kubernetes/pkg/kubelet/container"
+	"k8s.io/kubernetes/pkg/kubelet/cm/numamanager"
 	evictionapi "k8s.io/kubernetes/pkg/kubelet/eviction/api"
 	"k8s.io/kubernetes/pkg/kubelet/lifecycle"
 	"k8s.io/kubernetes/pkg/kubelet/status"
@@ -96,14 +97,8 @@ type ContainerManager interface {
 
 	// GetPodCgroupRoot returns the cgroup which contains all pods.
 	GetPodCgroupRoot() string
-
-	// GetPluginRegistrationHandler returns a plugin registration handler
-	// The pluginwatcher's Handlers allow to have a single module for handling
-	// registration.
-	GetPluginRegistrationHandler() pluginwatcher.PluginHandler
-
-	// GetDevices returns information about the devices assigned to pods and containers
-	GetDevices(podUID, containerName string) []*podresourcesapi.ContainerDevices
+	
+	GetNumaPodAdmitHandler() numamanager.NumaManager
 }
 
 type NodeConfig struct {

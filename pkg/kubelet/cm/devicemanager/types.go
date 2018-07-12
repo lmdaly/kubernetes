@@ -24,8 +24,8 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/config"
 	kubecontainer "k8s.io/kubernetes/pkg/kubelet/container"
 	"k8s.io/kubernetes/pkg/kubelet/lifecycle"
-	watcher "k8s.io/kubernetes/pkg/kubelet/util/pluginwatcher"
-	schedulernodeinfo "k8s.io/kubernetes/pkg/scheduler/nodeinfo"
+	"k8s.io/kubernetes/pkg/kubelet/cm/numamanager"
+	schedulercache "k8s.io/kubernetes/pkg/scheduler/cache"
 )
 
 // Manager manages all the Device Plugins running on a node.
@@ -54,10 +54,10 @@ type Manager interface {
 	// GetCapacity returns the amount of available device plugin resource capacity, resource allocatable
 	// and inactive device plugin resources previously registered on the node.
 	GetCapacity() (v1.ResourceList, v1.ResourceList, []string)
-	GetWatcherHandler() watcher.PluginHandler
-
-	// GetDevices returns information about the devices assigned to pods and containers
-	GetDevices(podUID, containerName string) []*podresourcesapi.ContainerDevices
+	
+	 // NumaManager HintProvider provider indicates the Device Manager implements the NUMA Manager Interface
+     	// and is consulted to make NUMA aware resource alignments
+     	numamanager.HintProvider
 }
 
 // DeviceRunContainerOptions contains the combined container runtime settings to consume its allocated devices.

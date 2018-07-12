@@ -21,8 +21,8 @@ import (
 	podresourcesapi "k8s.io/kubernetes/pkg/kubelet/apis/podresources/v1alpha1"
 	"k8s.io/kubernetes/pkg/kubelet/config"
 	"k8s.io/kubernetes/pkg/kubelet/lifecycle"
-	"k8s.io/kubernetes/pkg/kubelet/util/pluginwatcher"
-	schedulernodeinfo "k8s.io/kubernetes/pkg/scheduler/nodeinfo"
+	"k8s.io/kubernetes/pkg/kubelet/cm/numamanager"
+	schedulercache "k8s.io/kubernetes/pkg/scheduler/cache"
 )
 
 // ManagerStub provides a simple stub implementation for the Device Manager.
@@ -58,12 +58,7 @@ func (h *ManagerStub) GetCapacity() (v1.ResourceList, v1.ResourceList, []string)
 	return nil, nil, []string{}
 }
 
-// GetWatcherHandler returns plugin watcher interface
-func (h *ManagerStub) GetWatcherHandler() pluginwatcher.PluginHandler {
-	return nil
+func (h *ManagerStub) GetNUMAHints(pod v1.Pod, container v1.Container) numamanager.NumaMask {
+       return numamanager.NumaMask{}
 }
 
-// GetDevices returns nil
-func (h *ManagerStub) GetDevices(_, _ string) []*podresourcesapi.ContainerDevices {
-	return nil
-}

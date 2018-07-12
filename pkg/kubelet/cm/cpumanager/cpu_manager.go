@@ -32,6 +32,7 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/cm/cpumanager/topology"
 	"k8s.io/kubernetes/pkg/kubelet/cm/cpuset"
 	kubecontainer "k8s.io/kubernetes/pkg/kubelet/container"
+	"k8s.io/kubernetes/pkg/kubelet/cm/numamanager"
 	"k8s.io/kubernetes/pkg/kubelet/status"
 )
 
@@ -64,6 +65,13 @@ type Manager interface {
 
 	// State returns a read-only interface to the internal CPU manager state.
 	State() state.Reader
+	
+	// Returns the NUMA Affinity Best Fit
+	GetAffinity() numamanager.Store
+
+	// CPU Manager is a NUMA Hint Provider	
+    numamanager.HintProvider
+
 }
 
 type manager struct {
@@ -92,12 +100,14 @@ type manager struct {
 	machineInfo *cadvisorapi.MachineInfo
 
 	nodeAllocatableReservation v1.ResourceList
+	
+	affinity numamanager.Store
 }
 
 var _ Manager = &manager{}
 
 // NewManager creates new cpu manager based on provided policy
-func NewManager(cpuPolicyName string, reconcilePeriod time.Duration, machineInfo *cadvisorapi.MachineInfo, nodeAllocatableReservation v1.ResourceList, stateFileDirectory string) (Manager, error) {
+func NewManager(cpuPolicyName string, reconcilePeriod time.Duration, machineInfo *cadvisorapi.MachineInfo, nodeAllocatableReservation v1.ResourceList, stateFileDirectory string, affinity numamanager.Store) (Manager, error) {
 	var policy Policy
 
 	switch policyName(cpuPolicyName) {
@@ -147,8 +157,26 @@ func NewManager(cpuPolicyName string, reconcilePeriod time.Duration, machineInfo
 		state:                      stateImpl,
 		machineInfo:                machineInfo,
 		nodeAllocatableReservation: nodeAllocatableReservation,
+		affinity:                   affinity,
 	}
 	return manager, nil
+}
+
+func (m *manager) GetAffinity() numamanager.Store {
+       return m.affinity
+}
+
+func (m *manager) GetNUMAHints(pod v1.Pod, container v1.Container) numamanager.NumaMask {
+	//For testing purposes - manager should consult available resources and make numa mask based on container request
+	var nm []int64
+	nm = append(nm, 11)
+	nm = append(nm, 01)
+	nm = append(nm, 10)
+	glog.Infof("[cpumanager] NUMA Affinities for pod, container %v %v are %v", string(pod.UID), container.Name, nm)
+	return numamanager.NumaMask{
+	   Mask:     nm,
+	   Affinity: true,
+	}
 }
 
 func (m *manager) Start(activePods ActivePodsFunc, podStatusProvider status.PodStatusProvider, containerRuntime runtimeService) {
