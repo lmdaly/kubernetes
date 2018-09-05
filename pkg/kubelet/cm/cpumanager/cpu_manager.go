@@ -1,4 +1,4 @@
-	/*
+/*
 Copyright 2017 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -125,15 +125,13 @@ func NewManager(cpuPolicyName string, reconcilePeriod time.Duration, machineInfo
 		if err != nil {
 			return nil, err
 		}
-		glog.Infof("[cpumanager] ****** detected CPU topology: %v", topo)
+		glog.Infof("[cpumanager] detected CPU topology: %v", topo)
 		reservedCPUs, ok := nodeAllocatableReservation[v1.ResourceCPU]
 		if !ok {
-
 			// The static policy cannot initialize without this information.
 			return nil, fmt.Errorf("[cpumanager] unable to determine reserved CPU resources for static policy")
 		}
 		if reservedCPUs.IsZero() {
-
 			// The static policy requires this to be nonzero. Zero CPU reservation
 			// would allow the shared pool to be completely exhausted. At that point
 			// either we would violate our guarantee of exclusivity or need to evict
@@ -147,7 +145,6 @@ func NewManager(cpuPolicyName string, reconcilePeriod time.Duration, machineInfo
 		reservedCPUsFloat := float64(reservedCPUs.MilliValue()) / 1000
 		numReservedCPUs := int(math.Ceil(reservedCPUsFloat))
 		policy = NewStaticPolicy(topo, numReservedCPUs)
-
 
 	default:
 		klog.Errorf("[cpumanager] Unknown policy \"%s\", falling back to default policy \"%s\"", cpuPolicyName, PolicyNone)
@@ -170,8 +167,7 @@ func NewManager(cpuPolicyName string, reconcilePeriod time.Duration, machineInfo
 	return manager, nil
 }
 
-func (m *manager) GetAffinity() numamanager.Store {
-	
+func (m *manager) GetAffinity() numamanager.Store {	
        return m.affinity
 }
 
@@ -254,9 +250,7 @@ func (m *manager) GetNUMAHints(pod v1.Pod, container v1.Container) numamanager.N
            		Mask:     nm,
            		Affinity: false,
         	}
-
 	}
-
 }
 
 func (m *manager) Start(activePods ActivePodsFunc, podStatusProvider status.PodStatusProvider, containerRuntime runtimeService) {
@@ -301,7 +295,6 @@ func (m *manager) AddContainer(p *v1.Pod, c *v1.Container, containerID string) e
 	klog.V(5).Infof("[cpumanager] update container resources is skipped due to cpu set is empty")
 	return nil
 }
-
 
 func (m *manager) RemoveContainer(containerID string) error {
 	m.Lock()

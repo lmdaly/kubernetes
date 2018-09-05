@@ -82,8 +82,7 @@ func (m *numaManager) calculateNUMAAffinity(pod v1.Pod, container v1.Container) 
  				glog.Infof("[numamanager] NO Numa Affinity. Result %v", numaResult)
  				break;
  			}
- 		}
- 		
+ 		}	
 	}
  	podNumaMask.Mask = append(podNumaMask.Mask, numaResult[0])
  	return podNumaMask
@@ -147,12 +146,11 @@ func (m *numaManager) Admit(attrs *lifecycle.PodAdmitAttributes) lifecycle.PodAd
 		for _, container := range pod.Spec.Containers {
 			result := m.calculateNUMAAffinity(*pod, container)
 			if result.Affinity && result.Mask == nil {
-					return lifecycle.PodAdmitResult{
+				return lifecycle.PodAdmitResult{
 					Admit:   false,
 					Reason:	 "Numa Affinity Error",
 					Message: "Resources cannot be allocated with Numa Locality",
 				}
-
 			}
 			c[container.Name] = result		
 		}
