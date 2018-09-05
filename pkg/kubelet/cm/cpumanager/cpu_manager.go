@@ -1,4 +1,4 @@
-/*
+	/*
 Copyright 2017 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -77,7 +77,12 @@ type Manager interface {
 type manager struct {
 	sync.Mutex
 	policy Policy
-
+	
+	topo topology.CPUTopology
+	details topology.CPUDetails	
+	
+	a cpuAccumulator
+	p staticPolicy
 	// reconcilePeriod is the duration between calls to reconcileState.
 	reconcilePeriod time.Duration
 
@@ -120,13 +125,15 @@ func NewManager(cpuPolicyName string, reconcilePeriod time.Duration, machineInfo
 		if err != nil {
 			return nil, err
 		}
-		klog.Infof("[cpumanager] detected CPU topology: %v", topo)
+		glog.Infof("[cpumanager] ****** detected CPU topology: %v", topo)
 		reservedCPUs, ok := nodeAllocatableReservation[v1.ResourceCPU]
 		if !ok {
+
 			// The static policy cannot initialize without this information.
 			return nil, fmt.Errorf("[cpumanager] unable to determine reserved CPU resources for static policy")
 		}
 		if reservedCPUs.IsZero() {
+
 			// The static policy requires this to be nonzero. Zero CPU reservation
 			// would allow the shared pool to be completely exhausted. At that point
 			// either we would violate our guarantee of exclusivity or need to evict
@@ -140,6 +147,7 @@ func NewManager(cpuPolicyName string, reconcilePeriod time.Duration, machineInfo
 		reservedCPUsFloat := float64(reservedCPUs.MilliValue()) / 1000
 		numReservedCPUs := int(math.Ceil(reservedCPUsFloat))
 		policy = NewStaticPolicy(topo, numReservedCPUs)
+
 
 	default:
 		klog.Errorf("[cpumanager] Unknown policy \"%s\", falling back to default policy \"%s\"", cpuPolicyName, PolicyNone)
@@ -163,20 +171,92 @@ func NewManager(cpuPolicyName string, reconcilePeriod time.Duration, machineInfo
 }
 
 func (m *manager) GetAffinity() numamanager.Store {
+	
        return m.affinity
 }
 
 func (m *manager) GetNUMAHints(pod v1.Pod, container v1.Container) numamanager.NumaMask {
-	//For testing purposes - manager should consult available resources and make numa mask based on container request
-	var nm []int64
-	nm = append(nm, 11)
-	nm = append(nm, 01)
-	nm = append(nm, 10)
-	glog.Infof("[cpumanager] NUMA Affinities for pod, container %v %v are %v", string(pod.UID), container.Name, nm)
-	return numamanager.NumaMask{
-	   Mask:     nm,
-	   Affinity: true,
+
+	// Check string "cpu" here 
+	
+	// Get number of Guaranteed CPUs requested by pod
+	podp := &pod
+        containerp := &container
+        numCPUs := guaranteedCPUs(podp, containerp)
+        glog.Infof("[cpumanager] Guaranteed CPUs detected: %v", numCPUs)
+ 
+	// Discover machine topology
+	topo, err := topology.Discover(m.machineInfo)
+        if err != nil {
+                glog.Infof("[cpu manager] error discovering topology")
+        }
+	
+        glog.Infof("[cpumanager] CPU topology: %v", topo)
+
+	
+ 	// Find Assignable CPUs
+	assignableCPUs := m.p.assignableCPUs(m.state)
+        glog.Infof("[cpumanager] Assignable CPUs: %v", assignableCPUs)
+	
+
+	// New CPUAccumulator 
+	cpuAccum := newCPUAccumulator(topo, assignableCPUs, numCPUs)
+        glog.Infof("[cpumanager] New CPU Accumulator: %v", cpuAccum)
+
+	// Check for empty sockets
+	freeSockets := cpuAccum.freeSockets()
+	glog.Infof("[cpumanager] Free Sockets: %v", freeSockets)
+	
+	// Check for empty cores
+	freeCores := cpuAccum.freeCores()
+	glog.Infof("[cpumanager] Free Cores: %v", freeCores)
+
+	// Check for empty CPUs
+	freeCPUs := cpuAccum.freeCPUs()
+        glog.Infof("[cpumanager] Free CPUs: %v", freeCPUs)
+	// Check sockets individually (bool)
+	socket0Free := cpuAccum.isSocketFree(0)
+        glog.Infof("[cpumanager] Socket 0 free: %v", socket0Free)
+	socket1Free := cpuAccum.isSocketFree(1)
+	glog.Infof("[cpumanager] Socket 1 free: %v", socket1Free)
+
+
+	//Create mask based on socket true/false values
+	var nm []int64	
+	if socket0Free == false && socket1Free == true {
+		nm = append(nm, 01)
+		glog.Infof("[cpumanager] NUMA Affinities for pod, container %v %v are %v", string(pod.UID), container.Name, nm)
+		return numamanager.NumaMask{
+           		Mask:     nm,
+          		Affinity: true,
+        	}
+
+	} else if socket0Free == true && socket1Free == false {
+		nm = append(nm, 10)
+		glog.Infof("[cpumanager] NUMA Affinities for pod, container %v %v are %v", string(pod.UID), container.Name, nm)
+		return numamanager.NumaMask{
+           		Mask:     nm,
+           		Affinity: true,
+        	}
+
+	} else if socket0Free == true && socket1Free == true {
+		nm = append(nm, 11)
+	        glog.Infof("[cpumanager] NUMA Affinities for pod, container %v %v are %v", string(pod.UID), container.Name, nm)
+		return numamanager.NumaMask{
+           		Mask:     nm,
+           		Affinity: true,
+        	}
+
+	} else {
+		nm = append(nm, 00)
+	        glog.Infof("[cpumanager] NUMA Affinities for pod, container %v %v are %v", string(pod.UID), container.Name, nm)
+		return numamanager.NumaMask{
+           		Mask:     nm,
+           		Affinity: false,
+        	}
+
 	}
+
 }
 
 func (m *manager) Start(activePods ActivePodsFunc, podStatusProvider status.PodStatusProvider, containerRuntime runtimeService) {
@@ -221,6 +301,7 @@ func (m *manager) AddContainer(p *v1.Pod, c *v1.Container, containerID string) e
 	klog.V(5).Infof("[cpumanager] update container resources is skipped due to cpu set is empty")
 	return nil
 }
+
 
 func (m *manager) RemoveContainer(containerID string) error {
 	m.Lock()

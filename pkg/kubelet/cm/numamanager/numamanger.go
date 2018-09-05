@@ -74,15 +74,17 @@ func (m *numaManager) calculateNUMAAffinity(pod v1.Pod, container v1.Container) 
  	numaResult = append(numaResult, 11)
  	for _, hp := range m.hintProviders {
  		numaMask := hp.GetNUMAHints(pod, container)
- 		if numaMask.Affinity != false {
- 			podNumaMask.Affinity = true
+ 		if numaMask.Affinity {
+			podNumaMask.Affinity = true
  			orderedMask := getBitCount(numaMask.Mask)
+			glog.Infof("[numamanager] Numa Affinity. Mask: %v Affinity: %v", orderedMask, numaMask.Affinity)
  			if numaResult = getNumaAffinity(orderedMask, numaResult); numaResult == nil {
  				glog.Infof("[numamanager] NO Numa Affinity. Result %v", numaResult)
  				break;
  			}
  		}
- 	}
+ 		
+	}
  	podNumaMask.Mask = append(podNumaMask.Mask, numaResult[0])
  	return podNumaMask
  	
@@ -144,13 +146,13 @@ func (m *numaManager) Admit(attrs *lifecycle.PodAdmitAttributes) lifecycle.PodAd
 	if qosClass == "Guaranteed" {
 		for _, container := range pod.Spec.Containers {
 			result := m.calculateNUMAAffinity(*pod, container)
-			if result.Affinity == true && result.Mask == nil {
-				return lifecycle.PodAdmitResult{
+			if result.Affinity && result.Mask == nil {
+					return lifecycle.PodAdmitResult{
 					Admit:   false,
 					Reason:	 "Numa Affinity Error",
 					Message: "Resources cannot be allocated with Numa Locality",
-					
 				}
+
 			}
 			c[container.Name] = result		
 		}
