@@ -70,7 +70,7 @@ type Manager interface {
 	GetAffinity() numamanager.Store
 
 	// CPU Manager is a NUMA Hint Provider	
-    numamanager.HintProvider
+    	numamanager.HintProvider
 
 }
 
@@ -171,85 +171,23 @@ func (m *manager) GetAffinity() numamanager.Store {
        return m.affinity
 }
 
-func (m *manager) GetNUMAHints(pod v1.Pod, container v1.Container) numamanager.NumaMask {
-
-	// Check string "cpu" here 
-	
-	// Get number of Guaranteed CPUs requested by pod
-	podp := &pod
-        containerp := &container
-        numCPUs := guaranteedCPUs(podp, containerp)
-        glog.Infof("[cpumanager] Guaranteed CPUs detected: %v", numCPUs)
- 
-	// Discover machine topology
-	topo, err := topology.Discover(m.machineInfo)
-        if err != nil {
-                glog.Infof("[cpu manager] error discovering topology")
-        }
-	
-        glog.Infof("[cpumanager] CPU topology: %v", topo)
-
-	
- 	// Find Assignable CPUs
-	assignableCPUs := m.p.assignableCPUs(m.state)
-        glog.Infof("[cpumanager] Assignable CPUs: %v", assignableCPUs)
-	
-
-	// New CPUAccumulator 
-	cpuAccum := newCPUAccumulator(topo, assignableCPUs, numCPUs)
-        glog.Infof("[cpumanager] New CPU Accumulator: %v", cpuAccum)
-
-	// Check for empty sockets
-	freeSockets := cpuAccum.freeSockets()
-	glog.Infof("[cpumanager] Free Sockets: %v", freeSockets)
-	
-	// Check for empty cores
-	freeCores := cpuAccum.freeCores()
-	glog.Infof("[cpumanager] Free Cores: %v", freeCores)
-
-	// Check for empty CPUs
-	freeCPUs := cpuAccum.freeCPUs()
-        glog.Infof("[cpumanager] Free CPUs: %v", freeCPUs)
-	// Check sockets individually (bool)
-	socket0Free := cpuAccum.isSocketFree(0)
-        glog.Infof("[cpumanager] Socket 0 free: %v", socket0Free)
-	socket1Free := cpuAccum.isSocketFree(1)
-	glog.Infof("[cpumanager] Socket 1 free: %v", socket1Free)
-
-
-	//Create mask based on socket true/false values
-	var nm []int64	
-	if socket0Free == false && socket1Free == true {
-		nm = append(nm, 01)
-		glog.Infof("[cpumanager] NUMA Affinities for pod, container %v %v are %v", string(pod.UID), container.Name, nm)
-		return numamanager.NumaMask{
-           		Mask:     nm,
-          		Affinity: true,
-        	}
-
-	} else if socket0Free == true && socket1Free == false {
-		nm = append(nm, 10)
-		glog.Infof("[cpumanager] NUMA Affinities for pod, container %v %v are %v", string(pod.UID), container.Name, nm)
-		return numamanager.NumaMask{
-           		Mask:     nm,
-           		Affinity: true,
-        	}
-
-	} else if socket0Free == true && socket1Free == true {
-		nm = append(nm, 11)
-	        glog.Infof("[cpumanager] NUMA Affinities for pod, container %v %v are %v", string(pod.UID), container.Name, nm)
-		return numamanager.NumaMask{
-           		Mask:     nm,
-           		Affinity: true,
-        	}
-
-	} else {
-		nm = append(nm, 00)
-	        glog.Infof("[cpumanager] NUMA Affinities for pod, container %v %v are %v", string(pod.UID), container.Name, nm)
-		return numamanager.NumaMask{
-           		Mask:     nm,
-           		Affinity: false,
-        	}
+func (m *manager) GetNUMAHints(resource string, amount int) numamanager.NumaMask {
+	//For testing purposes - manager should consult available resources and make numa mask based on container request
+    	var nm []int64
+    	if resource != "cpu" {
+        	glog.Infof("Resource %v not managed by CPU Manager", resource)
+        	return numamanager.NumaMask{
+            		Mask:           nm,
+            	Affinity:       false,
+       	 	}	 
+    	}	
+	nm = append(nm, 11)
+	nm = append(nm, 01)
+	nm = append(nm, 10)
+    	glog.Infof("Container Resource Name in NUMA Manager: %v, Amount: %v", resource, amount)
+	return numamanager.NumaMask{
+	   Mask:     nm,
+	   Affinity: true,
 	}
 }
 

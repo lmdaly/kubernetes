@@ -51,7 +51,7 @@ func (m *fakeManager) RemoveContainer(containerID string) error {
 	return nil
 }
 
-func (m *fakeManager) GetNUMAHints(pod v1.Pod,  container v1.Container) numamanager.NumaMask {
+func (m *fakeManager) GetNUMAHints(resource string, amount int) numamanager.NumaMask {
        glog.Infof("[fake cpumanager] Get NUMA Hints")
        return numamanager.NumaMask{}
 }

@@ -27,7 +27,7 @@ type NumaManager interface {
  }
  
 type numaManager struct {
- 	//The list of componenets registered with the NumaManager
+ 	//The list of components registered with the NumaManager
  	hintProviders []HintProvider
  	//List of Containers and their NUMA Allocations
  	podNUMAHints map[string]containers	
@@ -35,11 +35,11 @@ type numaManager struct {
  
 //Interface to be implemented by Numa Allocators 
 type HintProvider interface {
- 	GetNUMAHints(pod v1.Pod, container v1.Container) NumaMask
+    	GetNUMAHints(resource string, amount int) NumaMask
 }
  
 type Store interface {
-	GetAffinity(pod v1.Pod, containerName string) NumaMask
+	GetAffinity(podUID string, containerName string) NumaMask
 }
  
 type NumaMask struct {
@@ -61,8 +61,8 @@ func NewNumaManager() NumaManager {
 	return numaManager
 }
 
-func (m *numaManager) GetAffinity(pod v1.Pod, containerName string) NumaMask {
- 	return m.podNUMAHints[string(pod.UID)][containerName]
+func (m *numaManager) GetAffinity(podUID string, containerName string) NumaMask {
+ 	return m.podNUMAHints[podUID][containerName]
 }
 
 func (m *numaManager) calculateNUMAAffinity(pod v1.Pod, container v1.Container) NumaMask {
@@ -73,17 +73,19 @@ func (m *numaManager) calculateNUMAAffinity(pod v1.Pod, container v1.Container) 
  	var numaResult []int64
  	numaResult = append(numaResult, 11)
  	for _, hp := range m.hintProviders {
- 		numaMask := hp.GetNUMAHints(pod, container)
- 		if numaMask.Affinity {
-			podNumaMask.Affinity = true
- 			orderedMask := getBitCount(numaMask.Mask)
-			glog.Infof("[numamanager] Numa Affinity. Mask: %v Affinity: %v", orderedMask, numaMask.Affinity)
- 			if numaResult = getNumaAffinity(orderedMask, numaResult); numaResult == nil {
- 				glog.Infof("[numamanager] NO Numa Affinity. Result %v", numaResult)
- 				break;
- 			}
- 		}	
-	}
+        for resource, amount := range container.Resources.Requests {
+            glog.Infof("Container Resource Name in NUMA Manager: %v, Amount: %v", resource, amount.Value())
+            numaMask := hp.GetNUMAHints(string(resource), int(amount.Value()))
+            if numaMask.Affinity != false {
+                podNumaMask.Affinity = true
+                orderedMask := getBitCount(numaMask.Mask)
+                if numaResult = getNumaAffinity(orderedMask, numaResult); numaResult == nil {
+                    glog.Infof("[numamanager] NO Numa Affinity. Result %v", numaResult)
+                    break;
+                }
+            }
+        }
+ 	}
  	podNumaMask.Mask = append(podNumaMask.Mask, numaResult[0])
  	return podNumaMask
  	

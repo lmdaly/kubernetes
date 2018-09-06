@@ -40,7 +40,7 @@ type internalContainerLifecycleImpl struct {
 func (i *internalContainerLifecycleImpl) PreStartContainer(pod *v1.Pod, container *v1.Container, containerID string) error {
 	if utilfeature.DefaultFeatureGate.Enabled(kubefeatures.CPUManager) {
 		affinity := i.cpuManager.GetAffinity()
-        glog.Infof("Container Info from Numa Manager: Pod: %v Container: %v NumaInfo: %v", string(pod.UID), container.Name, affinity.GetAffinity(*pod,  container.Name))
+        glog.Infof("Container Info from Numa Manager: Pod: %v Container: %v NumaInfo: %v", string(pod.UID), container.Name, affinity.GetAffinity(string(pod.UID),  container.Name))
 		return i.cpuManager.AddContainer(pod, container, containerID)
 	}
 	return nil

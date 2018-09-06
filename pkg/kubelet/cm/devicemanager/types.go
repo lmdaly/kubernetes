@@ -56,8 +56,8 @@ type Manager interface {
 	GetCapacity() (v1.ResourceList, v1.ResourceList, []string)
 	
 	 // NumaManager HintProvider provider indicates the Device Manager implements the NUMA Manager Interface
-     	// and is consulted to make NUMA aware resource alignments
-     	numamanager.HintProvider
+     // and is consulted to make NUMA aware resource alignments
+     GetNUMAHints(resource string, amount int) numamanager.NumaMask
 }
 
 // DeviceRunContainerOptions contains the combined container runtime settings to consume its allocated devices.
