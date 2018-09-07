@@ -77,12 +77,11 @@ type Manager interface {
 type manager struct {
 	sync.Mutex
 	policy Policy
-	
 	topo topology.CPUTopology
-	details topology.CPUDetails	
-	
-	a cpuAccumulator
-	p staticPolicy
+        details topology.CPUDetails
+        a cpuAccumulator
+        p staticPolicy
+
 	// reconcilePeriod is the duration between calls to reconcileState.
 	reconcilePeriod time.Duration
 
@@ -171,6 +170,7 @@ func (m *manager) GetAffinity() numamanager.Store {
        return m.affinity
 }
 
+<<<<<<< HEAD
 func (m *manager) GetNUMAHints(pod v1.Pod, container v1.Container) numamanager.NumaMask {
 
 	// Check string "cpu" here 
@@ -248,6 +248,87 @@ func (m *manager) GetNUMAHints(pod v1.Pod, container v1.Container) numamanager.N
         	Mask:     nm,
     	      	Affinity: true,
        	}
+=======
+func (m *manager) GetNUMAHints(resource string, amount int) numamanager.NumaMask {
+	//For testing purposes - manager should consult available resources and make numa mask based on container request
+    	var nm0 []int64
+
+    	// Check string "cpu" here
+	if resource != "cpu" {
+        	glog.Infof("Resource %v not managed by CPU Manager", resource)
+        	return numamanager.NumaMask{
+            		Mask:           nm0,
+            		Affinity:       false,
+       	 	}	 
+    	}
+	
+	glog.Infof("[cpumanager] Guaranteed CPUs detected: %v", amount)
+
+	// Discover machine topology
+        topo, err := topology.Discover(m.machineInfo)
+        if err != nil {
+                glog.Infof("[cpu manager] error discovering topology")
+        }
+        
+        glog.Infof("[cpumanager] CPU topology: %v", topo)
+	
+	// Find Assignable CPUs
+        assignableCPUs := m.p.assignableCPUs(m.state)
+        glog.Infof("[cpumanager] Assignable CPUs: %v", assignableCPUs)
+	
+	// New CPUAccumulator 
+        cpuAccum := newCPUAccumulator(topo, assignableCPUs, amount)
+        glog.Infof("[cpumanager] New CPU Accumulator: %v", cpuAccum)
+	
+	// Check for empty cores
+        freeCores := cpuAccum.freeCores()
+        glog.Infof("[cpumanager] Free Cores: %v", freeCores)
+
+        // Check for empty CPUs
+        freeCPUs := cpuAccum.freeCPUs()
+        glog.Infof("[cpumanager] Free CPUs: %v", freeCPUs)
+                 
+        // Get total number of sockets on machine 
+        socketCnt := topo.NumSockets
+        glog.Infof("[cpumanager] Number of sockets on machine (available and unavailable): %v", socketCnt)
+                
+        // Get number of FREE sockets 
+        freeSockets := cpuAccum.freeSockets()
+        glog.Infof("[cpumanager] Free Sockets: %v", freeSockets)
+        freeSocketCnt := len(freeSockets)       
+	
+	//If no free sockets available return No NUMA Affinity
+        if freeSocketCnt == 0 {
+                glog.Infof("[cpumanager] Number of free sockets available: %v. No NUMA Affinity",freeSocketCnt)
+                return numamanager.NumaMask{
+                        Mask:     nm0,
+                        Affinity: false,
+                }
+        }
+
+        // Arrays for mask and looping through sockets
+        nm := make([]int64, socketCnt)
+        socket := make([]bool, socketCnt)
+
+        // Loop through each socket checking availability and populate mask accordingly
+        for i := 0; i < socketCnt; i++ {
+                socket[i] = cpuAccum.isSocketFree(i)
+                glog.Infof("[cpumanager] Socket %v Free : %v",i, socket[i])
+                if socket[i] == true {
+                        glog.Infof("[cpumanager] Set Mask: nm = %v : %v",i, 1)
+                        nm[i] = 1
+                } else if socket[i] == false { 
+                        glog.Infof("[cpumanager] Set Mask: nm = %v : %v",i, 0)
+                        nm[i] = 0
+                }
+        }
+        glog.Infof("[cpumanager] NUMA Affinities for pod are %v", nm)
+
+        return numamanager.NumaMask{
+                Mask:     nm,
+                Affinity: true,
+        }
+>>>>>>> cpu manager loops through sockets - only returns fully free sockets atm
 }
 
 func (m *manager) Start(activePods ActivePodsFunc, podStatusProvider status.PodStatusProvider, containerRuntime runtimeService) {
