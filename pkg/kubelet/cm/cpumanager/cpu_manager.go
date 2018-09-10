@@ -74,10 +74,8 @@ type Manager interface {
 type manager struct {
 	sync.Mutex
 	policy Policy
-	topo topology.CPUTopology
-        details topology.CPUDetails
-        a cpuAccumulator
-        p staticPolicy
+
+        statPol staticPolicy
 
 	// reconcilePeriod is the duration between calls to reconcileState.
 	reconcilePeriod time.Duration
@@ -179,25 +177,18 @@ func (m *manager) GetNUMAHints(resource string, amount int) numamanager.NumaMask
         if err != nil {
                 glog.Infof("[cpu manager] error discovering topology")
         }
-        
-        glog.Infof("[cpumanager] CPU topology: %v", topo)
-	
+                
 	// Find Assignable CPUs
-        assignableCPUs := m.p.assignableCPUs(m.state)
-        glog.Infof("[cpumanager] Assignable CPUs: %v", assignableCPUs)
+	assignableCPUs := m.statPol.assignableCPUs(m.state)
+	glog.Infof("[cpumanager] Assignable CPUs: %v", assignableCPUs)
 	
-	// New CPUAccumulator 
-        cpuAccum := newCPUAccumulator(topo, assignableCPUs, amount)
-        glog.Infof("[cpumanager] New CPU Accumulator: %v", cpuAccum)
-	
-	// Check for empty cores
-        freeCores := cpuAccum.freeCores()
-        glog.Infof("[cpumanager] Free Cores: %v", freeCores)
-	                        
+	// New CPUAccumulator
+	cpuAccum := newCPUAccumulator(topo, assignableCPUs, amount)     
+
         // Get total number of sockets on machine 
         socketCnt := topo.NumSockets
         glog.Infof("[cpumanager] Number of sockets on machine (available and unavailable): %v", socketCnt)
-	
+
 	// Check for empty CPUs
 	freeCPUs := cpuAccum.freeCPUs()
 	glog.Infof("[cpumanager] Free CPUs (all Sockets): %v", freeCPUs)	
