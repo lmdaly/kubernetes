@@ -65,13 +65,10 @@ type Manager interface {
 
 	// State returns a read-only interface to the internal CPU manager state.
 	State() state.Reader
-	
-	// Returns the NUMA Affinity Best Fit
-	GetAffinity() numamanager.Store
-
-	// CPU Manager is a NUMA Hint Provider	
-    	numamanager.HintProvider
-
+        
+       // NumaManager HintProvider provider indicates the Device Manager implements the NUMA Manager Interface
+       // and is consulted to make NUMA aware resource alignments
+       GetNUMAHints(resource string, amount int) numamanager.NumaMask
 }
 
 type manager struct {
@@ -104,8 +101,6 @@ type manager struct {
 	machineInfo *cadvisorapi.MachineInfo
 
 	nodeAllocatableReservation v1.ResourceList
-	
-	affinity numamanager.Store
 }
 
 var _ Manager = &manager{}
@@ -143,7 +138,7 @@ func NewManager(cpuPolicyName string, reconcilePeriod time.Duration, machineInfo
 		// exclusively allocated.
 		reservedCPUsFloat := float64(reservedCPUs.MilliValue()) / 1000
 		numReservedCPUs := int(math.Ceil(reservedCPUsFloat))
-		policy = NewStaticPolicy(topo, numReservedCPUs)
+		policy = NewStaticPolicy(topo, numReservedCPUs, affinity)
 
 	default:
 		klog.Errorf("[cpumanager] Unknown policy \"%s\", falling back to default policy \"%s\"", cpuPolicyName, PolicyNone)
@@ -161,13 +156,8 @@ func NewManager(cpuPolicyName string, reconcilePeriod time.Duration, machineInfo
 		state:                      stateImpl,
 		machineInfo:                machineInfo,
 		nodeAllocatableReservation: nodeAllocatableReservation,
-		affinity:                   affinity,
 	}
 	return manager, nil
-}
-
-func (m *manager) GetAffinity() numamanager.Store {	
-       return m.affinity
 }
 
 func (m *manager) GetNUMAHints(resource string, amount int) numamanager.NumaMask {
