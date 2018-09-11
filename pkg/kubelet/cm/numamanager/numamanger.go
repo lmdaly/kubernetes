@@ -76,7 +76,6 @@ func (m *numaManager) calculateNUMAAffinity(pod v1.Pod, container v1.Container) 
         for resource, amount := range container.Resources.Requests {
             glog.Infof("Container Resource Name in NUMA Manager: %v, Amount: %v", resource, amount.Value())
             numaMask := hp.GetNUMAHints(string(resource), int(amount.Value()))
-	    glog.Infof("[numamanager] NUMA Affinities returned: Mask: %v, Affinity: %v", numaMask.Mask, numaMask.Affinity)
             if numaMask.Affinity != false {
                 podNumaMask.Affinity = true
                 orderedMask := getBitCount(numaMask.Mask)
