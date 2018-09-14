@@ -17,7 +17,6 @@ limitations under the License.
 package cm
 
 import (
-	"github.com/golang/glog"
 	
 	"k8s.io/api/core/v1"
 
@@ -38,9 +37,7 @@ type internalContainerLifecycleImpl struct {
 }
 
 func (i *internalContainerLifecycleImpl) PreStartContainer(pod *v1.Pod, container *v1.Container, containerID string) error {
-	if utilfeature.DefaultFeatureGate.Enabled(kubefeatures.CPUManager) {
-		affinity := i.cpuManager.GetAffinity()
-        glog.Infof("Container Info from Numa Manager: Pod: %v Container: %v NumaInfo: %v", string(pod.UID), container.Name, affinity.GetAffinity(string(pod.UID),  container.Name))
+	if utilfeature.DefaultFeatureGate.Enabled(kubefeatures.CPUManager) {   
 		return i.cpuManager.AddContainer(pod, container, containerID)
 	}
 	return nil
