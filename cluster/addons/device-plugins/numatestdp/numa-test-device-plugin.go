@@ -24,6 +24,7 @@ import (
 	"path/filepath"
 	"syscall"
 	"time"
+	"strconv"
 
 	"github.com/golang/glog"
 	"golang.org/x/net/context"
@@ -197,6 +198,7 @@ func (test *testManager) GetDevicePluginOptions(ctx context.Context, empty *plug
 //Allocate passes the PCI Addr(s) as an env variable to the requesting container
 func (test *testManager) Allocate(ctx context.Context, rqt *pluginapi.AllocateRequest) (*pluginapi.AllocateResponse, error) {
 	resp := new(pluginapi.AllocateResponse)
+	ids := ""
 	for _, container := range rqt.ContainerRequests {
 		containerResp := new(pluginapi.ContainerAllocateResponse)
 		for _, id := range container.DevicesIDs {
@@ -210,16 +212,17 @@ func (test *testManager) Allocate(ctx context.Context, rqt *pluginapi.AllocateRe
 				glog.Errorf("Error. Invalid allocation request with unhealthy device %s", id)
 				return nil, fmt.Errorf("Error. Invalid allocation request with unhealthy device %s", id)
 			}
+			ids = ids + "{" + id + ", " + strconv.Itoa(int(dev.Socket)) + "}"
 		}
-
 		envmap := make(map[string]string)
-		envmap["NUMA-TEST-DP"] = "NUMA"
-
+		envmap["[Device ID, Socket ID]"] = ids
 		containerResp.Envs = envmap
 		resp.ContainerResponses = append(resp.ContainerResponses, containerResp)
 	}
 	return resp, nil
-}
+} 
+
+
 
 func main() {
 	flag.Parse()
