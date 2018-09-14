@@ -202,32 +202,20 @@ func (m *manager) GetNUMAHints(resource string, amount int) numamanager.NumaMask
    	}
 	glog.Infof("[cpumanager] Number of Free CPUs per Socket: %v", CPUsInSocketSize)	
 	
-	// Create Mask based on free CPUs
-	nm := make([]int64, socketCnt)
-	for i := 0; i < socketCnt; i++ {
-		if CPUsInSocketSize[i] >= amount {
-			nm[i] = 1
-		} else if CPUsInSocketSize[i] < amount{
-			nm[i] = 0
-		}
+	//Temporary method for testing sockets - dual-socket only POC
+	var nm []int64
+	if CPUsInSocketSize[0] >= amount && CPUsInSocketSize[1] < amount {
+		nm = append(nm, 10)
+	} else if CPUsInSocketSize[0] < amount && CPUsInSocketSize[1] >= amount {
+		nm = append(nm, 01)
+	} else if CPUsInSocketSize[0] >= amount && CPUsInSocketSize[1] >= amount {
+		nm = append(nm, 11)
+	} else if CPUsInSocketSize[0] < amount && CPUsInSocketSize[1] < amount {
+		nm = append(nm, 00)
 	}
-	glog.Infof("[cpumanager] NUMA Affinities for pod are %v", nm)
-	
-	// Check if no CPUs available and return false
-	var nmSum int64 = 0	
-	for i := 0; i < socketCnt; i++ {
-		nmSum += nm[i]
-	}
-	if nmSum == 0 {
-		return numamanager.NumaMask{
-			Mask:     nm,
-			Affinity: false,
-		}
-	}else {
-		return numamanager.NumaMask{
-			Mask:     nm,
-			Affinity: true,
-		}
+	return numamanager.NumaMask{
+		Mask:     nm,
+		Affinity: true,
 	}	
 }
 
