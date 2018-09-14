@@ -222,10 +222,6 @@ func (m *manager) GetNUMAHints(resource string, amount int) numamanager.NumaMask
 		nm = append(nm, 11)
 	} else if CPUsInSocketSize[0] < amount && CPUsInSocketSize[1] < amount {
 		nm = append(nm, 00)
-		return numamanager.NumaMask{
-			Mask:     nm,
-			Affinity: false,
-		}
 	}
 	return numamanager.NumaMask{
 		Mask:     nm,
