@@ -75,8 +75,6 @@ type manager struct {
 	sync.Mutex
 	policy Policy
 
-        statPol staticPolicy
-
 	// reconcilePeriod is the duration between calls to reconcileState.
 	reconcilePeriod time.Duration
 
@@ -179,22 +177,22 @@ func (m *manager) GetNUMAHints(resource string, amount int) numamanager.NumaMask
         if err != nil {
                 glog.Infof("[cpu manager] error discovering topology")
         }
-        
-	reservedCPUs := m.nodeAllocatableReservation[v1.ResourceCPU]
-	glog.Infof("[cpumanager] Reserved CPUs: %v", reservedCPUs)
+	
+	// Get no. of shared CPUs
+	allCPUs := topo.CPUDetails.CPUs()
+	glog.Infof("[cpumanager] Shared CPUs: %v", allCPUs)        
+	
+	// Get Reserved CPUs
+	reservedCPUs := m.nodeAllocatableReservation[v1.ResourceCPU]	
 	reservedCPUsFloat := float64(reservedCPUs.MilliValue()) / 1000
-	numReservedCPUs := int(math.Ceil(reservedCPUsFloat))
-	glog.Infof("[cpumanager] Number of Reserved CPUs: %v", numReservedCPUs)	        
-	
+	numReservedCPUs := int(math.Ceil(reservedCPUsFloat))        	
+	reserved, _ := takeByTopology(topo, allCPUs, numReservedCPUs)
+	glog.Infof("[cpumanager] Reserved CPUs: %v", reserved)
+			
+	//Get Assignable CPUs (Shared - Reserved)
+	assignableCPUs := m.state.GetDefaultCPUSet().Difference(reserved)
+	glog.Infof("[cpumanager] Assignable CPUs (Shared - Reserved): %v", assignableCPUs)
 		
-	//newAssignableCPUs := m.state.GetDefaultCPUSet().Difference(reservedCPUs)
-	//glog.Infof("[cpumanager] NEW Assignable CPUs: %v", newAssignableCPUs)
-	
-	//m.statPol.reserved = cpuset.CPUSet(reservedCPUs)
-	// Find Assignable CPUs
-	assignableCPUs := m.statPol.assignableCPUs(m.state)
-	glog.Infof("[cpumanager] Assignable CPUs: %v", assignableCPUs)
-	
 	// New CPUAccumulator
 	cpuAccum := newCPUAccumulator(topo, assignableCPUs, amount)     
 
@@ -204,16 +202,16 @@ func (m *manager) GetNUMAHints(resource string, amount int) numamanager.NumaMask
 
 	// Check for empty CPUs
 	freeCPUs := cpuAccum.freeCPUs()
-	glog.Infof("[cpumanager] Free CPUs (all Sockets): %v", freeCPUs)	
+	glog.Infof("[cpumanager] Assignable CPUs (all Sockets): %v", freeCPUs)	
 
 	// Get Number of free CPUs per Socket
 	CPUsInSocketSize := make([]int64, socketCnt)
 	for i := 0; i < socketCnt; i++ {
 		CPUsInSocket := cpuAccum.details.CPUsInSocket(i)
-		glog.Infof("[cpumanager] Free CPUs on Socket %v: %v", i, CPUsInSocket)
+		glog.Infof("[cpumanager] Assignable CPUs on Socket %v: %v", i, CPUsInSocket)
 		CPUsInSocketSize[i] = int64(CPUsInSocket.Size())			
    	}
-	glog.Infof("[cpumanager] Number of Free CPUs per Socket: %v", CPUsInSocketSize)	
+	glog.Infof("[cpumanager] Number of Assignable CPUs per Socket: %v", CPUsInSocketSize)	
 	
 	 // Method for testing sockets - dual-socket only POC
         nmTemp := make([]int64,3)
