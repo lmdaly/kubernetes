@@ -38,7 +38,7 @@ const (
 	pluginMountPath      = "/var/lib/kubelet/device-plugins"
 	kubeletEndpoint      = "kubelet.sock"
 	pluginEndpointPrefix = "numadp"
-	resourceName         = "intel.com/numa_test_dp"
+	resourceName         = "intel.com/numa_test_dp_2"
 )
 
 type testManager struct {
@@ -59,16 +59,16 @@ func newTestManager() *testManager {
 func (test *testManager) discoverTestResources() error {
  	test.devices = make(map[string]*pluginapi.Device)
  	glog.Infof("Discovered Devices below:")
- 	dev001 := pluginapi.Device{ID: "25102017", Health: pluginapi.Healthy, Socket: 0,}
- 	dev002 := pluginapi.Device{ID: "26102017", Health: pluginapi.Healthy, Socket: 1,}
-        dev003 := pluginapi.Device{ID: "27102017", Health: pluginapi.Healthy, Socket: 1,}
- 	test.devices["25102017"] = &dev001
- 	test.devices["26102017"] = &dev002
-        test.devices["27102017"] = &dev003
+ 	dev001 := pluginapi.Device{ID: "35102017", Health: pluginapi.Healthy, Socket: 0,}
+ 	dev002 := pluginapi.Device{ID: "36102017", Health: pluginapi.Healthy, Socket: 0,}
+        dev003 := pluginapi.Device{ID: "37102017", Health: pluginapi.Healthy, Socket: 1,}
+ 	test.devices["35102017"] = &dev001
+ 	test.devices["36102017"] = &dev002
+        test.devices["37102017"] = &dev003
  	for k, dev := range test.devices {
- 			fmt.Printf("device[Key =%v] Value= %v\n",k,dev)
-       }
-       return nil
+           	fmt.Printf("device[Key =%v] Value= %v\n",k,dev)
+        }
+        return nil
 }
 
 func (test *testManager) GetDeviceState(DeviceName string) string {

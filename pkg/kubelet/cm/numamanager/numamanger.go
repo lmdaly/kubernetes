@@ -76,12 +76,22 @@ func (m *numaManager) calculateNUMAAffinity(pod v1.Pod, container v1.Container) 
         for resource, amount := range container.Resources.Requests {
             glog.Infof("Container Resource Name in NUMA Manager: %v, Amount: %v", resource, amount.Value())
             numaMask := hp.GetNUMAHints(string(resource), int(amount.Value()))
-            if numaMask.Affinity != false {
+            if numaMask.Affinity && numaMask.Mask != nil {
                 podNumaMask.Affinity = true
+                glog.Infof("[numamanager] numaMask in calculateNUMAAffinity: %v", numaMask.Mask)
                 orderedMask := getBitCount(numaMask.Mask)
                 if numaResult = getNumaAffinity(orderedMask, numaResult); numaResult == nil {
                     glog.Infof("[numamanager] NO Numa Affinity. Result %v", numaResult)
-                    break;
+                    return NumaMask {
+                        Mask:		nil,
+                        Affinity:	true,
+                    }
+                }
+            } else if numaMask.Affinity && numaMask.Mask == nil {
+                glog.Infof("[numamanager] NO Numa Affinity.")
+                return NumaMask {
+                    Mask:		nil,
+                    Affinity:	true,
                 }
             }
         }

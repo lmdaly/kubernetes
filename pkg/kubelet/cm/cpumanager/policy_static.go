@@ -189,16 +189,17 @@ func (p *staticPolicy) AddContainer(s state.State, pod *v1.Pod, container *v1.Co
         	glog.Infof("[cpumanager] Pod %v, Container %v NUMA Affinity is: %v", pod.UID, container.Name, containerNumaMask)
 
         	//Socket Parsing temporary hack - needs addressing
-        	var socketID int
-        	if containerNumaMask.Mask[0] == 01 {
-            		socketID = 1
-        	} else if containerNumaMask.Mask[0] == 10 {
-            		socketID = 0
-        	} else {
-            		socketID = -1
-        	}
+                sockets := make(map[int]bool)
+                if containerNumaMask.Mask[0] == 01 {
+                	sockets[1] = true
+            	} else if containerNumaMask.Mask[0] == 10 {
+                	sockets[0] = true
+            	} else if containerNumaMask.Mask[0] == 11 {
+                	sockets[1] = true
+                	sockets[0] = true
+            	}
 
-		cpuset, err := p.allocateCPUs(s, numCPUs, socketID)
+		cpuset, err := p.allocateCPUs(s, numCPUs, sockets)
 		if err != nil {
 			klog.Errorf("[cpumanager] unable to allocate %d CPUs (container id: %s, error: %v)", numCPUs, containerID, err)
 			return err
@@ -219,12 +220,14 @@ func (p *staticPolicy) RemoveContainer(s state.State, containerID string) error 
 	return nil
 }
 
-func (p *staticPolicy) allocateCPUs(s state.State, numCPUs int, socketID int) (cpuset.CPUSet, error) {
-	glog.Infof("[cpumanager] allocateCpus: (numCPUs: %d, socket: %d)", numCPUs, socketID)
-
-    	assignableCPUs := p.assignableCPUs(s).Intersection(p.topology.CPUDetails.CPUsInSocket(socketID))
-    	glog.Infof("[cpumanager] NUMA Aligned assingbale CPUs: %v", assignableCPUs)
-
+func (p *staticPolicy) allocateCPUs(s state.State, numCPUs int, sockets map[int]bool) (cpuset.CPUSet, error) {
+	glog.Infof("[cpumanager] allocateCpus: (numCPUs: %d, socket: %d)", numCPUs, sockets)
+        assignableCPUs := cpuset.NewCPUSet()
+    	for socketID, socketAvail := range sockets {
+        	if socketAvail {
+            		assignableCPUs = assignableCPUs.Union(p.assignableCPUs(s).Intersection(p.topology.CPUDetails.CPUsInSocket(socketID)))
+        	}
+    	}
     	result, err := takeByTopology(p.topology, assignableCPUs, numCPUs)
 	if err != nil {
 		return cpuset.NewCPUSet(), err
