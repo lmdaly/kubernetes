@@ -75,8 +75,6 @@ type manager struct {
 	sync.Mutex
 	policy Policy
 
-        statPol staticPolicy
-
 	// reconcilePeriod is the duration between calls to reconcileState.
 	reconcilePeriod time.Duration
 
@@ -160,7 +158,9 @@ func NewManager(cpuPolicyName string, reconcilePeriod time.Duration, machineInfo
 
 func (m *manager) GetNUMAHints(resource string, amount int) numamanager.NumaMask {
 	//For testing purposes - manager should consult available resources and make numa mask based on container request
-    	var nm0 []int64
+    	var amount64 int64
+	amount64 = int64(amount)
+	var nm0 []int64
     	// Check string "cpu" here
 	if resource != "cpu" {
         	glog.Infof("Resource %v not managed by CPU Manager", resource)
@@ -177,11 +177,22 @@ func (m *manager) GetNUMAHints(resource string, amount int) numamanager.NumaMask
         if err != nil {
                 glog.Infof("[cpu manager] error discovering topology")
         }
-                
-	// Find Assignable CPUs
-	assignableCPUs := m.statPol.assignableCPUs(m.state)
-	glog.Infof("[cpumanager] Assignable CPUs: %v", assignableCPUs)
 	
+	// Get no. of shared CPUs
+	allCPUs := topo.CPUDetails.CPUs()
+	glog.Infof("[cpumanager] Shared CPUs: %v", allCPUs)        
+	
+	// Get Reserved CPUs
+	reservedCPUs := m.nodeAllocatableReservation[v1.ResourceCPU]	
+	reservedCPUsFloat := float64(reservedCPUs.MilliValue()) / 1000
+	numReservedCPUs := int(math.Ceil(reservedCPUsFloat))        	
+	reserved, _ := takeByTopology(topo, allCPUs, numReservedCPUs)
+	glog.Infof("[cpumanager] Reserved CPUs: %v", reserved)
+			
+	//Get Assignable CPUs (Shared - Reserved)
+	assignableCPUs := m.state.GetDefaultCPUSet().Difference(reserved)
+	glog.Infof("[cpumanager] Assignable CPUs (Shared - Reserved): %v", assignableCPUs)
+		
 	// New CPUAccumulator
 	cpuAccum := newCPUAccumulator(topo, assignableCPUs, amount)     
 
@@ -191,32 +202,51 @@ func (m *manager) GetNUMAHints(resource string, amount int) numamanager.NumaMask
 
 	// Check for empty CPUs
 	freeCPUs := cpuAccum.freeCPUs()
-	glog.Infof("[cpumanager] Free CPUs (all Sockets): %v", freeCPUs)	
+	glog.Infof("[cpumanager] Assignable CPUs (all Sockets): %v", freeCPUs)	
 
 	// Get Number of free CPUs per Socket
-	CPUsInSocketSize := make([]int, socketCnt)
+	CPUsInSocketSize := make([]int64, socketCnt)
 	for i := 0; i < socketCnt; i++ {
 		CPUsInSocket := cpuAccum.details.CPUsInSocket(i)
-		glog.Infof("[cpumanager] Free CPUs on Socket %v: %v", i, CPUsInSocket)
-		CPUsInSocketSize[i] = CPUsInSocket.Size()			
+		glog.Infof("[cpumanager] Assignable CPUs on Socket %v: %v", i, CPUsInSocket)
+		CPUsInSocketSize[i] = int64(CPUsInSocket.Size())			
    	}
-	glog.Infof("[cpumanager] Number of Free CPUs per Socket: %v", CPUsInSocketSize)	
+	glog.Infof("[cpumanager] Number of Assignable CPUs per Socket: %v", CPUsInSocketSize)	
 	
-	//Temporary method for testing sockets - dual-socket only POC
-	var nm []int64
-	if CPUsInSocketSize[0] >= amount && CPUsInSocketSize[1] < amount {
-		nm = append(nm, 10)
-	} else if CPUsInSocketSize[0] < amount && CPUsInSocketSize[1] >= amount {
-		nm = append(nm, 01)
-	} else if CPUsInSocketSize[0] >= amount && CPUsInSocketSize[1] >= amount {
-		nm = append(nm, 11)
-	} else if CPUsInSocketSize[0] < amount && CPUsInSocketSize[1] < amount {
-		nm = append(nm, 00)
-	}
+	 // Method for testing sockets - dual-socket only POC
+        nmTemp := make([]int64,3)
+        if CPUsInSocketSize[0] >= amount64 {
+                nmTemp[0] = 10
+        } 
+	if CPUsInSocketSize[1] >= amount64 {
+                nmTemp[1] = 01
+        } 	
+	if (CPUsInSocketSize[0] + CPUsInSocketSize[1]) >= amount64 {
+                nmTemp[2] = 11
+        } 
+	// Set flag for slice length for Mask
+	nmTempCnt := len(nmTemp)
+	count := 0
+	for i := 0; i < nmTempCnt; i++ {
+		if nmTemp[i] != 0 {
+              		count++
+        	}
+        }
+	// create Mask, populate with values != 0
+	nm := make([]int64,count)
+	j := 0	
+	for i := 0; i < nmTempCnt; i++ {
+		if nmTemp[i] != 0 {
+			nm[j] = nmTemp[i]
+              		j++
+        	}
+        }	
+	glog.Infof("[cpumanager] NUMA Affinities for pod are %v", nm)
+
 	return numamanager.NumaMask{
 		Mask:     nm,
 		Affinity: true,
-	}	
+	}  
 }
 
 func (m *manager) Start(activePods ActivePodsFunc, podStatusProvider status.PodStatusProvider, containerRuntime runtimeService) {
