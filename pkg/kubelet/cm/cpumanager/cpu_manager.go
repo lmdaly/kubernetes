@@ -21,7 +21,7 @@ import (
 	"math"
 	"sync"
 	"time"
-
+	"github.com/golang/glog"
 	cadvisorapi "github.com/google/cadvisor/info/v1"
 	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -157,17 +157,19 @@ func NewManager(cpuPolicyName string, reconcilePeriod time.Duration, machineInfo
 }
 
 func (m *manager) GetNUMAHints(resource string, amount int) numamanager.NumaMask {
-	//For testing purposes - manager should consult available resources and make numa mask based on container request
-    	var amount64 int64
+	//For testing purposes - manager should consult available resources and make numa mask based on container request 
+	var amount64 int64
 	amount64 = int64(amount)
-	var nm0 []int64
+	var nm0 [][]int64
+
     	// Check string "cpu" here
 	if resource != "cpu" {
         	glog.Infof("Resource %v not managed by CPU Manager", resource)
         	return numamanager.NumaMask{
             		Mask:           nm0,
             		Affinity:       false,
-       	 	}	 
+      	 	}
+
     	}
 	
 	glog.Infof("[cpumanager] Guaranteed CPUs detected: %v", amount)
@@ -197,56 +199,77 @@ func (m *manager) GetNUMAHints(resource string, amount int) numamanager.NumaMask
 	cpuAccum := newCPUAccumulator(topo, assignableCPUs, amount)     
 
         // Get total number of sockets on machine 
-        socketCnt := topo.NumSockets
-        glog.Infof("[cpumanager] Number of sockets on machine (available and unavailable): %v", socketCnt)
+       socketCount := topo.NumSockets
+        glog.Infof("[cpumanager] Number of sockets on machine (available and unavailable): %v", socketCount)
+
 
 	// Check for empty CPUs
 	freeCPUs := cpuAccum.freeCPUs()
 	glog.Infof("[cpumanager] Assignable CPUs (all Sockets): %v", freeCPUs)	
 
 	// Get Number of free CPUs per Socket
-	CPUsInSocketSize := make([]int64, socketCnt)
-	for i := 0; i < socketCnt; i++ {
+	CPUsInSocketSize := make([]int64, socketCount)
+	var arr []int64
+	var sum int64 = 0
+	
+	for i := 0; i < socketCount; i++ {
 		CPUsInSocket := cpuAccum.details.CPUsInSocket(i)
 		glog.Infof("[cpumanager] Assignable CPUs on Socket %v: %v", i, CPUsInSocket)
-		CPUsInSocketSize[i] = int64(CPUsInSocket.Size())			
+		CPUsInSocketSize[i] = int64(CPUsInSocket.Size())
+		sum += CPUsInSocketSize[i]
+		if CPUsInSocketSize[i] >= amount64 {
+			for j := 0; j < i; j++ {
+				arr = append(arr, 0)
+			}
+			arr = append(arr, 1)
+			
+			for j := 0; j < socketCount-(i+1); j++ {
+				arr = append(arr, 0)
+			}
+		} else {
+			for j := 0; j < i; j++ {
+				arr = append(arr, 0)
+			}
+			arr = append(arr, 0)
+			for j := 0; j < socketCount-(i+1); j++ {
+				arr = append(arr, 0)
+			}
+		}			
    	}
-	glog.Infof("[cpumanager] Number of Assignable CPUs per Socket: %v", CPUsInSocketSize)	
-	
-	 // Method for testing sockets - dual-socket only POC
-        nmTemp := make([]int64,3)
-        if CPUsInSocketSize[0] >= amount64 {
-                nmTemp[0] = 10
-        } 
-	if CPUsInSocketSize[1] >= amount64 {
-                nmTemp[1] = 01
-        } 	
-	if (CPUsInSocketSize[0] + CPUsInSocketSize[1]) >= amount64 {
-                nmTemp[2] = 11
-        } 
-	// Set flag for slice length for Mask
-	nmTempCnt := len(nmTemp)
-	count := 0
-	for i := 0; i < nmTempCnt; i++ {
-		if nmTemp[i] != 0 {
-              		count++
-        	}
+	if sum >= amount64 {
+                for i := 0; i < socketCount; i++ {
+                        if CPUsInSocketSize[i] == 0 {
+                                arr = append(arr, 0)
+                        } else {
+                                arr = append(arr, 1)
+                        }
+                }
         }
-	// create Mask, populate with values != 0
-	nm := make([]int64,count)
-	j := 0	
-	for i := 0; i < nmTempCnt; i++ {
-		if nmTemp[i] != 0 {
-			nm[j] = nmTemp[i]
-              		j++
-        	}
-        }	
-	glog.Infof("[cpumanager] NUMA Affinities for pod are %v", nm)
+	var divided [][]int64
+	var chunkSizeTmp int
+        chunkSizeTmp = (len(arr) - socketCount) / socketCount
+	chunkSize := int64(chunkSizeTmp)
+        var i int64
+        for i = 0; i < int64(len(arr)); i += chunkSize {
+                end := i + chunkSize
 
+                if end > int64(len(arr)) {
+                        end = int64(len(arr))
+                }
+
+                divided = append(divided, arr[i:end])
+        }
+
+        glog.Infof("[numa manager] NUMA Affinities for pod (divided array): %v", divided)
+		
+	glog.Infof("[cpumanager] Number of Assignable CPUs per Socket: %v", CPUsInSocketSize)	
+	//glog.Infof("[cpumanager] NUMA Affinities for pod (Array built) %v", arr)
+	glog.Infof("[numa manager] NUMA Affinities for pod (divided array): %v", divided)	
+	
 	return numamanager.NumaMask{
-		Mask:     nm,
-		Affinity: true,
-	}  
+                Mask:     divided,     
+                Affinity: true,
+        }
 }
 
 func (m *manager) Start(activePods ActivePodsFunc, podStatusProvider status.PodStatusProvider, containerRuntime runtimeService) {

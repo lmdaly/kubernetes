@@ -22,7 +22,6 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-    "strconv"
 	"sync"
 	"time"
 
@@ -146,7 +145,8 @@ func newManagerImpl(socketPath string, numaAffinityStore numamanager.Store) (*Ma
 
 func (m *ManagerImpl) GetNUMAHints(resource string, amount int) numamanager.NumaMask {
 	devices := m.Devices()
-    	var nm []int64
+    	var nm [][]int64
+
     	glog.Infof("Devices in GetNUMAHints: %v", devices)
     
     	glog.Infof("Container Resource Name in Device Manager: %v, Amount: %v", resource, amount)
@@ -178,60 +178,95 @@ func (m *ManagerImpl) GetNUMAHints(resource string, amount int) numamanager.Numa
             	Affinity:       false,
         	}
 	}
-    	glog.Infof("Available devices for resource: %v", available)
-    	//Figure this out programatically 
-    	const numSockets int = 2
-    	duplicates := map[int]bool{}
-    	socketsAvail := map[int]int{}
-    	defaultMask := [numSockets]int{}
-    	for availID := range available {
-        	for _, device := range devices[resource] {
-            		glog.Infof("AvailID: %v DeviceID: %v", availID, device)
-            		if availID == device.ID {
-                		socket := int(device.Socket)
-                		socketsAvail[socket]++
-                		if socketsAvail[socket] >= amount {
-                    			glog.Infof("Socket: %v", socket)
-                    			//Efficiency?
-                    			deviceMask := ""
-                    			socketMask := [numSockets]int{0,0}
-                    			socketMask[socket] = 1
-                    			for _, bit := range socketMask {
-                        			deviceMask += strconv.Itoa(bit)
-                    			}
-                    			glog.Infof("DeviceMask: %v", deviceMask)
-                    			deviceMaskInt, err := strconv.Atoi(deviceMask)
-                    			if err != nil {
-                        			glog.Errorf("Err: Cannot convert deviceMask to int. %v")
-                        			break
-                    			}
-                    			if !duplicates[deviceMaskInt] {
-                        			duplicates[deviceMaskInt] = true
-                        			nm = append(nm, int64(deviceMaskInt))
-                    			}
-                	        }    
-                		//WIP for preferred     
-                		defaultMask[socket] = 1             
-                		break
+    	glog.Infof("[device-manager] Available devices for resource: %v", available)	
+	duplicate_frequency := make(map[int64]int64)
+	var socketValues []int64	
+ 	for availID := range available {
+		for _, device := range devices[resource] {
+			glog.Infof("[device-manager] AvailID: %v DeviceID: %v", availID, device)
+			if availID == device.ID {
+				socket := int64(device.Socket)
+				socketValues = append(socketValues, socket)	//slice of sockets with resource
+				if duplicate_frequency[socket] <= 1 {
+                    			duplicate_frequency[socket] += 1
+                		} else {
+                    			duplicate_frequency[socket] = 1
+                		}					
+			}						
+		}
+	}	
+	glog.Infof("[device-manager] Sockets with device: %v", socketValues)
+	
+	var count, devicesTotal int64 = 0, 0 	
+	var amount64 int64
+	amount64 = int64(amount)	
+	var availableSockets []int64
+	var notEmptySkts []int64
+	// Loop through device counts (duplicates of each socket) - return if resources not available on a socket
+	for socket, devicesPerSkt := range duplicate_frequency{
+ 		glog.Infof("[device-manager] Socket : %d , number of devices : %d", socket, devicesPerSkt)
+		devicesTotal = devicesTotal + devicesPerSkt
+		if devicesPerSkt !=0 {
+			notEmptySkts = append(notEmptySkts, socket)
+		}
+		if devicesPerSkt >= amount64 {
+			availableSockets = append(availableSockets, socket)
+			count++
+		}		
+ 	}
+	glog.Infof("[device-manager] Device Count Total: %v", devicesTotal)	
+
+	if count == 0 {
+		glog.Infof("[device-manager] No Socket has available resources - Preferred only")
+	}    
+	glog.Infof("[device-manager] Sockets with 1 or more available devices: %v", notEmptySkts)
+	glog.Infof("[device-manager] Sockets with enough available devices: %v", availableSockets)
+	
+	// Find the largest socket that is NOT empty
+        var largestSkt int64 = 0
+        for i := 0; i < len(notEmptySkts); i++ {
+                if largestSkt < notEmptySkts[i] {
+                        largestSkt = notEmptySkts[i]
+                }
+        }
+        glog.Infof("[device-manager] Largest socket that is NOT empty: %v", largestSkt)
+	
+	var socketMask []int64
+	fullMask:= make([][]int64,len(availableSockets))
+	var socket int64 = 0
+	var i int64
+	// Use largest socket to construct 2D slice (mask) for return to NUMA Manager
+	for j := 0; j < len(availableSockets); j++ {
+		socketMask = nil
+		socket = availableSockets[j]	
+		for i = 0; i <= largestSkt; i++ {
+            		if i == socket {
+                		socketMask = append(socketMask, 1)
+            		} else {
+                		socketMask = append(socketMask, 0)
             		}
-        	}
-    	}
-    	//WIP for preferred  
-    	deviceMask := ""
-    	for _, bit := range defaultMask {
-        	deviceMask += strconv.Itoa(bit)
-    	}
-    	glog.Infof("DeviceMask: %v", deviceMask)
-    	deviceMaskInt, err := strconv.Atoi(deviceMask)
-    	if err != nil {
-        	glog.Errorf("Err: Cannot convert deviceMask to int. %v")
-    	}
-    	nm = append(nm, int64(deviceMaskInt))
-    	glog.Infof("[devicemanager] NUMA Affinities for %v %v resource(s) are %v", amount, resource, nm)
-	return numamanager.NumaMask{
-		  Mask:           nm,
-		  Affinity:       true,
+        	}			
+		fullMask[j] = socketMask 
+	}	
+	
+	//Build final slice for full mask - overall affinity for preferred state (only if more than 1 available skt)
+	overallMask := make([]int64, largestSkt+1)
+	if (len(fullMask) > 1) || ((len(fullMask) == 0) && (devicesTotal >= amount64)) {
+		var k int64
+		for k = 0; k < largestSkt+1; k ++ {
+			for l := 0; l < len(notEmptySkts); l ++ {
+				if k == notEmptySkts[l] {
+					overallMask[k] = 1
+				} 	
+			}
+		}
+		fullMask = append(fullMask,overallMask)
 	}
+	glog.Infof("[devicemanager] NUMA Affinities for %v %v resource(s) are %v", amount, resource, fullMask)
+	return numamanager.NumaMask{
+                  Mask:           fullMask,
+                  Affinity:       true,
+        }
 }
 
 func (m *ManagerImpl) genericDeviceUpdateCallback(resourceName string, added, updated, deleted []pluginapi.Device) {

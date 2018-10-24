@@ -190,11 +190,11 @@ func (p *staticPolicy) AddContainer(s state.State, pod *v1.Pod, container *v1.Co
 
         	//Socket Parsing temporary hack - needs addressing
                 sockets := make(map[int]bool)
-                if containerNumaMask.Mask[0] == 01 {
+                if containerNumaMask.Mask[0][0] == 01 {
                 	sockets[1] = true
-            	} else if containerNumaMask.Mask[0] == 10 {
+            	} else if containerNumaMask.Mask[0][0] == 10 {
                 	sockets[0] = true
-            	} else if containerNumaMask.Mask[0] == 11 {
+            	} else if containerNumaMask.Mask[0][0] == 11 {
                 	sockets[1] = true
                 	sockets[0] = true
             	}
