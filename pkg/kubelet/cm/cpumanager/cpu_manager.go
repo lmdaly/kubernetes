@@ -21,7 +21,6 @@ import (
 	"math"
 	"sync"
 	"time"
-
 	"github.com/golang/glog"
 	cadvisorapi "github.com/google/cadvisor/info/v1"
 	"k8s.io/api/core/v1"
@@ -32,6 +31,7 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/cm/cpumanager/topology"
 	"k8s.io/kubernetes/pkg/kubelet/cm/cpuset"
 	kubecontainer "k8s.io/kubernetes/pkg/kubelet/container"
+	"k8s.io/kubernetes/pkg/kubelet/cm/numamanager"
 	"k8s.io/kubernetes/pkg/kubelet/status"
 )
 
@@ -64,6 +64,10 @@ type Manager interface {
 
 	// State returns a read-only interface to the internal CPU manager state.
 	State() state.Reader
+        
+       // NumaManager HintProvider provider indicates the Device Manager implements the NUMA Manager Interface
+       // and is consulted to make NUMA aware resource alignments
+       GetNUMAHints(resource string, amount int) numamanager.NumaMask
 }
 
 type manager struct {
@@ -97,7 +101,7 @@ type manager struct {
 var _ Manager = &manager{}
 
 // NewManager creates new cpu manager based on provided policy
-func NewManager(cpuPolicyName string, reconcilePeriod time.Duration, machineInfo *cadvisorapi.MachineInfo, nodeAllocatableReservation v1.ResourceList, stateFileDirectory string) (Manager, error) {
+func NewManager(cpuPolicyName string, reconcilePeriod time.Duration, machineInfo *cadvisorapi.MachineInfo, nodeAllocatableReservation v1.ResourceList, stateFileDirectory string, affinity numamanager.Store) (Manager, error) {
 	var policy Policy
 
 	switch policyName(cpuPolicyName) {
@@ -129,7 +133,7 @@ func NewManager(cpuPolicyName string, reconcilePeriod time.Duration, machineInfo
 		// exclusively allocated.
 		reservedCPUsFloat := float64(reservedCPUs.MilliValue()) / 1000
 		numReservedCPUs := int(math.Ceil(reservedCPUsFloat))
-		policy = NewStaticPolicy(topo, numReservedCPUs)
+		policy = NewStaticPolicy(topo, numReservedCPUs, affinity)
 
 	default:
 		glog.Errorf("[cpumanager] Unknown policy \"%s\", falling back to default policy \"%s\"", cpuPolicyName, PolicyNone)
@@ -149,6 +153,119 @@ func NewManager(cpuPolicyName string, reconcilePeriod time.Duration, machineInfo
 		nodeAllocatableReservation: nodeAllocatableReservation,
 	}
 	return manager, nil
+}
+
+func (m *manager) GetNUMAHints(resource string, amount int) numamanager.NumaMask {
+	//For testing purposes - manager should consult available resources and make numa mask based on container request 
+	var amount64 int64
+	amount64 = int64(amount)
+	var nm0 [][]int64
+    	// Check string "cpu" here
+	if resource != "cpu" {
+        	glog.Infof("Resource %v not managed by CPU Manager", resource)
+        	return numamanager.NumaMask{
+            		Mask:           nm0,
+            		Affinity:       false,
+       	 	}
+    	}
+	
+	glog.Infof("[cpumanager] Guaranteed CPUs detected: %v", amount)
+
+	// Discover machine topology
+        topo, err := topology.Discover(m.machineInfo)
+        if err != nil {
+                glog.Infof("[cpu manager] error discovering topology")
+        }
+	
+	// Get no. of shared CPUs
+	allCPUs := topo.CPUDetails.CPUs()
+	glog.Infof("[cpumanager] Shared CPUs: %v", allCPUs)        
+	
+	// Get Reserved CPUs
+	reservedCPUs := m.nodeAllocatableReservation[v1.ResourceCPU]	
+	reservedCPUsFloat := float64(reservedCPUs.MilliValue()) / 1000
+	numReservedCPUs := int(math.Ceil(reservedCPUsFloat))        	
+	reserved, _ := takeByTopology(topo, allCPUs, numReservedCPUs)
+	glog.Infof("[cpumanager] Reserved CPUs: %v", reserved)
+			
+	//Get Assignable CPUs (Shared - Reserved)
+	assignableCPUs := m.state.GetDefaultCPUSet().Difference(reserved)
+	glog.Infof("[cpumanager] Assignable CPUs (Shared - Reserved): %v", assignableCPUs)
+		
+	// New CPUAccumulator
+	cpuAccum := newCPUAccumulator(topo, assignableCPUs, amount)     
+
+        // Get total number of sockets on machine 
+        socketCount := topo.NumSockets
+        glog.Infof("[cpumanager] Number of sockets on machine (available and unavailable): %v", socketCount)
+
+	// Check for empty CPUs
+	freeCPUs := cpuAccum.freeCPUs()
+	glog.Infof("[cpumanager] Assignable CPUs (all Sockets): %v", freeCPUs)	
+
+	// Get Number of free CPUs per Socket
+	CPUsInSocketSize := make([]int64, socketCount)
+	var arr []int64
+	var sum int64 = 0
+	
+	for i := 0; i < socketCount; i++ {
+		CPUsInSocket := cpuAccum.details.CPUsInSocket(i)
+		glog.Infof("[cpumanager] Assignable CPUs on Socket %v: %v", i, CPUsInSocket)
+		CPUsInSocketSize[i] = int64(CPUsInSocket.Size())
+		sum += CPUsInSocketSize[i]
+		if CPUsInSocketSize[i] >= amount64 {
+			for j := 0; j < i; j++ {
+				arr = append(arr, 0)
+			}
+			arr = append(arr, 1)
+			
+			for j := 0; j < socketCount-(i+1); j++ {
+				arr = append(arr, 0)
+			}
+		} else {
+			for j := 0; j < i; j++ {
+				arr = append(arr, 0)
+			}
+			arr = append(arr, 0)
+			for j := 0; j < socketCount-(i+1); j++ {
+				arr = append(arr, 0)
+			}
+		}			
+   	}
+	if sum >= amount64 {
+                for i := 0; i < socketCount; i++ {
+                        if CPUsInSocketSize[i] == 0 {
+                                arr = append(arr, 0)
+                        } else {
+                                arr = append(arr, 1)
+                        }
+                }
+        }
+	var divided [][]int64
+	var chunkSizeTmp int
+        chunkSizeTmp = (len(arr) - socketCount) / socketCount
+	chunkSize := int64(chunkSizeTmp)
+        var i int64
+        for i = 0; i < int64(len(arr)); i += chunkSize {
+                end := i + chunkSize
+
+                if end > int64(len(arr)) {
+                        end = int64(len(arr))
+                }
+
+                divided = append(divided, arr[i:end])
+        }
+
+        glog.Infof("[numa manager] NUMA Affinities for pod (divided array): %v", divided)
+		
+	glog.Infof("[cpumanager] Number of Assignable CPUs per Socket: %v", CPUsInSocketSize)	
+	//glog.Infof("[cpumanager] NUMA Affinities for pod (Array built) %v", arr)
+	glog.Infof("[numa manager] NUMA Affinities for pod (divided array): %v", divided)	
+	
+	return numamanager.NumaMask{
+                Mask:     divided,     
+                Affinity: true,
+        }
 }
 
 func (m *manager) Start(activePods ActivePodsFunc, podStatusProvider status.PodStatusProvider, containerRuntime runtimeService) {

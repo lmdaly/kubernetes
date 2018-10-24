@@ -21,6 +21,7 @@ import (
 	pluginapi "k8s.io/kubernetes/pkg/kubelet/apis/deviceplugin/v1beta1"
 	"k8s.io/kubernetes/pkg/kubelet/config"
 	"k8s.io/kubernetes/pkg/kubelet/lifecycle"
+	"k8s.io/kubernetes/pkg/kubelet/cm/numamanager"
 	schedulercache "k8s.io/kubernetes/pkg/scheduler/cache"
 )
 
@@ -61,3 +62,8 @@ func (h *ManagerStub) GetDeviceRunContainerOptions(pod *v1.Pod, container *v1.Co
 func (h *ManagerStub) GetCapacity() (v1.ResourceList, v1.ResourceList, []string) {
 	return nil, nil, []string{}
 }
+
+func (h *ManagerStub) GetNUMAHints(resource string, amount int) numamanager.NumaMask {
+       return numamanager.NumaMask{}
+}
+

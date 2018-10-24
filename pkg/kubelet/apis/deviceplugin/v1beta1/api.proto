@@ -77,6 +77,7 @@ message ListAndWatchResponse {
 * struct Device {
 *    ID: "GPU-fef8089b-4820-abfc-e83e-94318197576e",
 *    State: "Healthy",
+*    Socket: "0",
 *} */
 message Device {
 	// A unique ID assigned by the device plugin used
@@ -85,6 +86,8 @@ message Device {
 	string ID = 1;
 	// Health of the device, can be healthy or unhealthy, see constants.go
 	string health = 2;
+        //NUMA Node of Device
+        int64 socket = 3;
 }
 
 // - PreStartContainer is expected to be called before each container start if indicated by plugin during registration phase.
