@@ -14,9 +14,11 @@ package numamanager
 import (
  	"strconv"
  	"strings"
- 	"github.com/golang/glog"
+	"bytes"
+	"math"
+ 	"github.com/golang/glog"	
  	"k8s.io/api/core/v1"
- 	"k8s.io/kubernetes/pkg/kubelet/lifecycle"
+	"k8s.io/kubernetes/pkg/kubelet/lifecycle"
 )
  
 type NumaManager interface {
@@ -43,7 +45,7 @@ type Store interface {
 }
  
 type NumaMask struct {
- 	Mask []int64
+	Mask [][]int64
 	Affinity bool
 }
  
@@ -66,75 +68,151 @@ func (m *numaManager) GetAffinity(podUID string, containerName string) NumaMask 
 }
 
 func (m *numaManager) calculateNUMAAffinity(pod v1.Pod, container v1.Container) NumaMask {
- 	podNumaMask := NumaMask {
- 		Mask:		nil,
- 		Affinity:	false,
- 	}
- 	var numaResult []int64
- 	numaResult = append(numaResult, 11)
- 	for _, hp := range m.hintProviders {
-        for resource, amount := range container.Resources.Requests {
-            glog.Infof("Container Resource Name in NUMA Manager: %v, Amount: %v", resource, amount.Value())
-            numaMask := hp.GetNUMAHints(string(resource), int(amount.Value()))
-            if numaMask.Affinity && numaMask.Mask != nil {
-                podNumaMask.Affinity = true
-                glog.Infof("[numamanager] numaMask in calculateNUMAAffinity: %v", numaMask.Mask)
-                orderedMask := getBitCount(numaMask.Mask)
-                if numaResult = getNumaAffinity(orderedMask, numaResult); numaResult == nil {
-                    glog.Infof("[numamanager] NO Numa Affinity. Result %v", numaResult)
-                    return NumaMask {
-                        Mask:		nil,
-                        Affinity:	true,
-                    }
-                }
-            } else if numaMask.Affinity && numaMask.Mask == nil {
-                glog.Infof("[numamanager] NO Numa Affinity.")
-                return NumaMask {
-                    Mask:		nil,
-                    Affinity:	true,
-                }
-            }
+        var row,col int = 1, 1
+        nmTest := make([][]int64, row)
+        for i:= range nmTest {
+                nmTest[i] = make([]int64,col)
         }
- 	}
- 	podNumaMask.Mask = append(podNumaMask.Mask, numaResult[0])
- 	return podNumaMask
- 	
+
+	podNumaMask := NumaMask {
+                Mask:           nmTest,
+                Affinity:       false,
+        }
+        
+	var maskHolder []string
+	count := 0 
+	var finalMask int64
+        for _, hp := range m.hintProviders {
+		for resource, amount := range container.Resources.Requests {
+			glog.Infof("Container Resource Name in NUMA Manager: %v, Amount: %v", resource, amount.Value())
+			numaMask := hp.GetNUMAHints(string(resource), int(amount.Value()))                          
+			if numaMask.Affinity && numaMask.Mask != nil {
+				if count == 0 {
+					outerLen := len(numaMask.Mask)
+					var innerLen int = 0
+					for i := 0; i < outerLen; i++ {
+						if innerLen < len(numaMask.Mask[i]) {
+							innerLen = len(numaMask.Mask[i])
+						}
+					}
+					var buffer bytes.Buffer
+					var i, j int = 0, 0
+					for i = 0; i < outerLen; i++ {
+						for j = 0; j < innerLen; j++ {
+        						buffer.WriteString("1")
+    						}
+						maskHolder = append(maskHolder, buffer.String())
+						buffer.Reset()
+					}
+					count++
+				}
+				glog.Infof("[numa manager] MaskHolder : %v", maskHolder)
+				//Arrange int array into array of strings 
+				glog.Infof("[numa manager] %v is passed into arrange function",numaMask.Mask)   
+				arrangedMask := arrangeMask(numaMask.Mask)						
+				newMask := getNUMAAffinity(arrangedMask, maskHolder)
+				//FIXME - take most suitable value from mask, not just random
+				glog.Infof("[numa manager] New Mask after getNUMAAffinity (new mask) : %v ",newMask)
+				finalMask = parseMask(newMask)
+				glog.Infof("[numamanager] Mask Int64 (finalMask): %v", finalMask)
+				maskHolder = newMask
+				glog.Infof("[numa manager] New MaskHolder: %v", maskHolder) 
+     
+			} else if numaMask.Affinity && numaMask.Mask == nil {
+				glog.Infof("[numamanager] NO Numa Affinity.")
+				return NumaMask {
+					Mask:		nil,
+					Affinity:   	true,   
+				}       
+			}  
+		}
+	}
+	podNumaMask.Mask[0][0] = finalMask
+	return podNumaMask       
 }
 
-func getBitCount(mask []int64) []int64 {
- 	var orderedMask []int64
- 	prevCount := 0
- 	for _, bitset := range mask {
- 		sbitset := strconv.Itoa(int(bitset))
- 		count := 0
- 		for _, bit := range sbitset {
- 			if strings.Compare(string(bit), "1") == 0 {
- 				count += 1
- 			}
- 		}
- 		if count > prevCount {
- 			orderedMask = append(orderedMask, bitset)
- 			prevCount = count
- 		}else {
- 			orderedMask = append([]int64{bitset}, orderedMask...)
- 		}
- 	}
- 	return orderedMask
+func getNUMAAffinity(arrangedMask, maskHolder []string) []string {
+	var numaTest []string
+        for i:= 0; i < (len(maskHolder)); i++ {
+        	for j:= 0; j < (len(arrangedMask)); j++ {
+               		tempStr := andOperation(maskHolder[i],arrangedMask[j])
+                      	if strings.Contains(tempStr, "1") {
+                               	numaTest = append(numaTest, tempStr )
+                      	}
+               	}
+     	}
+        duplicates := map[string]bool{}
+        for v:= range numaTest {
+        	duplicates[numaTest[v]] = true
+        }
+       	// Place all keys from the map into a slice.
+       	numaResult := []string{}
+      	for key, _ := range duplicates {
+       		numaResult = append(numaResult, key)
+     	}
+	
+	return numaResult
 }
 
-func getNumaAffinity (maska, maskb []int64) []int64 {
- 	var newResult []int64
- 	for _, mask := range maska {
- 		for _, resultMask := range maskb {
- 			var affinity int64
- 			affinity = 0
- 			affinity = mask & resultMask 
- 			if affinity != 0 {
- 				newResult = append(newResult, affinity)
- 			}
- 		}
- 	}
- 	return newResult
+func parseMask(mask []string) int64 {
+	maskLen := len(mask)
+	var maskStr string
+	for i := 0; i < maskLen; i++ {
+		if strings.Contains( mask[i], "1") {
+			maskStr = mask[i]
+			break
+		} else {
+			maskStr = "0"
+		}
+	}
+	maskInt, _ := strconv.Atoi(maskStr)
+	var maskInt64 int64
+	maskInt64 = int64(maskInt)
+	return maskInt64
+}
+
+func arrangeMask(mask [][]int64) []string {
+	var socketStr []string
+	var bufferNew bytes.Buffer
+	outerLen := len(mask)
+	innerLen := len(mask[0])
+	for i := 0; i < outerLen; i++ {
+		for j := 0; j < innerLen; j++ {
+			if mask[i][j] == 1 {
+				bufferNew.WriteString("1")
+			} else if mask[i][j] == 0 {
+				bufferNew.WriteString("0")
+			}
+		}
+		socketStr = append(socketStr, bufferNew.String())
+		bufferNew.Reset()
+	}
+	return socketStr
+}
+
+func andOperation(val1, val2 string) (string) {
+	l1, l2 := len(val1), len(val2)
+	//compare lengths of strings - pad shortest with trailing zeros
+	if l1 != l2 {
+		// Get the bit difference
+		var num int
+		diff := math.Abs(float64(l1) - float64(l2))
+		num = int(diff)
+		if l1 < l2 {
+			val1 = val1 + strings.Repeat("0", num)
+		} else {
+			val2 = val2 + strings.Repeat("0", num)
+		}
+	}
+	length := len(val1)
+	byteArr := make([]byte, length)
+	for i := 0; i < length ; i++ {
+		byteArr[i] = (val1[i] & val2[i])
+    	}
+	var finalStr string
+	finalStr = string(byteArr[:])	
+	
+	return finalStr
 }
 
 func (m *numaManager) AddHintProvider(h HintProvider) {
