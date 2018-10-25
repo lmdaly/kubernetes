@@ -67,16 +67,10 @@ func (m *numaManager) GetAffinity(podUID string, containerName string) NumaMask 
  	return m.podNUMAHints[podUID][containerName]
 }
 
-func (m *numaManager) calculateNUMAAffinity(pod v1.Pod, container v1.Container) NumaMask {
-        var row,col int = 1, 1
-        nmTest := make([][]int64, row)
-        for i:= range nmTest {
-                nmTest[i] = make([]int64,col)
-        }
-
+func (m *numaManager) calculateNUMAAffinity(pod v1.Pod, container v1.Container) NumaMask { 
 	podNumaMask := NumaMask {
-                Mask:           nmTest,
-                Affinity:       false,
+                Mask: 		nil,
+		Affinity:       false,
         }
         
 	var maskHolder []string
@@ -88,22 +82,7 @@ func (m *numaManager) calculateNUMAAffinity(pod v1.Pod, container v1.Container) 
 			numaMask := hp.GetNUMAHints(string(resource), int(amount.Value()))                          
 			if numaMask.Affinity && numaMask.Mask != nil {
 				if count == 0 {
-					outerLen := len(numaMask.Mask)
-					var innerLen int = 0
-					for i := 0; i < outerLen; i++ {
-						if innerLen < len(numaMask.Mask[i]) {
-							innerLen = len(numaMask.Mask[i])
-						}
-					}
-					var buffer bytes.Buffer
-					var i, j int = 0, 0
-					for i = 0; i < outerLen; i++ {
-						for j = 0; j < innerLen; j++ {
-        						buffer.WriteString("1")
-    						}
-						maskHolder = append(maskHolder, buffer.String())
-						buffer.Reset()
-					}
+					maskHolder = buildMaskHolder(numaMask.Mask)	
 					count++
 				}
 				glog.Infof("[numa manager] MaskHolder : %v", maskHolder)
@@ -127,9 +106,33 @@ func (m *numaManager) calculateNUMAAffinity(pod v1.Pod, container v1.Container) 
 			}  
 		}
 	}
-	podNumaMask.Mask[0][0] = finalMask
+	var inner []int64
+	inner = append(inner, finalMask)
+	podNumaMask.Mask = append(podNumaMask.Mask, inner)
 	return podNumaMask       
 }
+
+func buildMaskHolder(mask [][]int64) []string {
+	var maskHolder []string
+	outerLen := len(mask)
+        var innerLen int = 0 
+      	for i := 0; i < outerLen; i++ {
+        	if innerLen < len(mask[i]) {
+          		innerLen = len(mask[i])
+       		}
+     	}
+       	var buffer bytes.Buffer
+   	var i, j int = 0, 0
+       	for i = 0; i < outerLen; i++ {
+    		for j = 0; j < innerLen; j++ {
+            		buffer.WriteString("1")
+     		}
+         	maskHolder = append(maskHolder, buffer.String())
+               	buffer.Reset()
+     	}
+	return maskHolder
+}
+
 
 func getNUMAAffinity(arrangedMask, maskHolder []string) []string {
 	var numaTest []string

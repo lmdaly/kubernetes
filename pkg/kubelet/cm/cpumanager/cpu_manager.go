@@ -199,9 +199,8 @@ func (m *manager) GetNUMAHints(resource string, amount int) numamanager.NumaMask
 	cpuAccum := newCPUAccumulator(topo, assignableCPUs, amount)     
 
         // Get total number of sockets on machine 
-       socketCount := topo.NumSockets
+       	socketCount := topo.NumSockets
         glog.Infof("[cpumanager] Number of sockets on machine (available and unavailable): %v", socketCount)
-
 
 	// Check for empty CPUs
 	freeCPUs := cpuAccum.freeCPUs()
@@ -211,31 +210,24 @@ func (m *manager) GetNUMAHints(resource string, amount int) numamanager.NumaMask
 	CPUsInSocketSize := make([]int64, socketCount)
 	var arr []int64
 	var sum int64 = 0
-	
+	var divided [][]int64
 	for i := 0; i < socketCount; i++ {
 		CPUsInSocket := cpuAccum.details.CPUsInSocket(i)
 		glog.Infof("[cpumanager] Assignable CPUs on Socket %v: %v", i, CPUsInSocket)
 		CPUsInSocketSize[i] = int64(CPUsInSocket.Size())
 		sum += CPUsInSocketSize[i]
 		if CPUsInSocketSize[i] >= amount64 {
-			for j := 0; j < i; j++ {
-				arr = append(arr, 0)
-			}
-			arr = append(arr, 1)
-			
-			for j := 0; j < socketCount-(i+1); j++ {
-				arr = append(arr, 0)
-			}
-		} else {
-			for j := 0; j < i; j++ {
-				arr = append(arr, 0)
-			}
-			arr = append(arr, 0)
-			for j := 0; j < socketCount-(i+1); j++ {
-				arr = append(arr, 0)
-			}
-		}			
-   	}
+			for j := 0; j < socketCount; j++ {
+                		if j == i {
+                    			arr = append(arr, 1)
+                		} else {
+                    			arr = append(arr, 0)
+                		}
+            		}
+            		divided = append(divided, arr)
+            		arr = nil
+		}						
+	}
 	if sum >= amount64 {
                 for i := 0; i < socketCount; i++ {
                         if CPUsInSocketSize[i] == 0 {
@@ -244,26 +236,10 @@ func (m *manager) GetNUMAHints(resource string, amount int) numamanager.NumaMask
                                 arr = append(arr, 1)
                         }
                 }
-        }
-	var divided [][]int64
-	var chunkSizeTmp int
-        chunkSizeTmp = (len(arr) - socketCount) / socketCount
-	chunkSize := int64(chunkSizeTmp)
-        var i int64
-        for i = 0; i < int64(len(arr)); i += chunkSize {
-                end := i + chunkSize
-
-                if end > int64(len(arr)) {
-                        end = int64(len(arr))
-                }
-
-                divided = append(divided, arr[i:end])
+		divided = append(divided, arr)
         }
 
-        glog.Infof("[numa manager] NUMA Affinities for pod (divided array): %v", divided)
-		
-	glog.Infof("[cpumanager] Number of Assignable CPUs per Socket: %v", CPUsInSocketSize)	
-	//glog.Infof("[cpumanager] NUMA Affinities for pod (Array built) %v", arr)
+       	glog.Infof("[numa manager] Number of Assignable CPUs per Socket: %v", CPUsInSocketSize)	
 	glog.Infof("[numa manager] NUMA Affinities for pod (divided array): %v", divided)	
 	
 	return numamanager.NumaMask{

@@ -187,7 +187,7 @@ func (m *ManagerImpl) GetNUMAHints(resource string, amount int) numamanager.Numa
 			if availID == device.ID {
 				socket := int64(device.Socket)
 				socketValues = append(socketValues, socket)	//slice of sockets with resource
-				if duplicate_frequency[socket] <= 1 {
+				if duplicate_frequency[socket] >= 1 {
                     			duplicate_frequency[socket] += 1
                 		} else {
                     			duplicate_frequency[socket] = 1
@@ -233,12 +233,10 @@ func (m *ManagerImpl) GetNUMAHints(resource string, amount int) numamanager.Numa
 	
 	var socketMask []int64
 	fullMask:= make([][]int64,len(availableSockets))
-	var socket int64 = 0
 	var i int64
 	// Use largest socket to construct 2D slice (mask) for return to NUMA Manager
-	for j := 0; j < len(availableSockets); j++ {
-		socketMask = nil
-		socket = availableSockets[j]	
+	for j, socket := range availableSockets {
+		socketMask = nil	
 		for i = 0; i <= largestSkt; i++ {
             		if i == socket {
                 		socketMask = append(socketMask, 1)
@@ -254,8 +252,8 @@ func (m *ManagerImpl) GetNUMAHints(resource string, amount int) numamanager.Numa
 	if (len(fullMask) > 1) || ((len(fullMask) == 0) && (devicesTotal >= amount64)) {
 		var k int64
 		for k = 0; k < largestSkt+1; k ++ {
-			for l := 0; l < len(notEmptySkts); l ++ {
-				if k == notEmptySkts[l] {
+			for _, notEmptySkt := range notEmptySkts {
+				if k == notEmptySkt {
 					overallMask[k] = 1
 				} 	
 			}
