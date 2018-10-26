@@ -21,7 +21,7 @@ import (
 	pluginapi "k8s.io/kubernetes/pkg/kubelet/apis/deviceplugin/v1beta1"
 	"k8s.io/kubernetes/pkg/kubelet/config"
 	"k8s.io/kubernetes/pkg/kubelet/lifecycle"
-	"k8s.io/kubernetes/pkg/kubelet/cm/numamanager"
+	"k8s.io/kubernetes/pkg/kubelet/cm/topologymanager"
 	schedulercache "k8s.io/kubernetes/pkg/scheduler/cache"
 )
 
@@ -63,7 +63,7 @@ func (h *ManagerStub) GetCapacity() (v1.ResourceList, v1.ResourceList, []string)
 	return nil, nil, []string{}
 }
 
-func (h *ManagerStub) GetNUMAHints(resource string, amount int) numamanager.NumaMask {
-       return numamanager.NumaMask{}
+func (h *ManagerStub) GetTopologyHints(resource string, amount int) topologymanager.TopologyHints {
+       return topologymanager.TopologyHints{}
 }
 

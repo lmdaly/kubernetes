@@ -25,7 +25,7 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/cm/cpumanager"
 	"k8s.io/kubernetes/pkg/kubelet/config"
 	kubecontainer "k8s.io/kubernetes/pkg/kubelet/container"
-	"k8s.io/kubernetes/pkg/kubelet/cm/numamanager"
+	"k8s.io/kubernetes/pkg/kubelet/cm/topologymanager"
 	"k8s.io/kubernetes/pkg/kubelet/lifecycle"
 	"k8s.io/kubernetes/pkg/kubelet/status"
 	schedulercache "k8s.io/kubernetes/pkg/scheduler/cache"
@@ -101,7 +101,7 @@ func (cm *containerManagerStub) GetPodCgroupRoot() string {
 	return ""
 }
 
-func (cm *containerManagerStub) GetNumaPodAdmitHandler() numamanager.NumaManager {
+func (cm *containerManagerStub) GetTopologyPodAdmitHandler() topologymanager.Manager {
        return nil
 }
 
