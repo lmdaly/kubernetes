@@ -10,7 +10,7 @@
  limitations under the License.
  */
  
-package numamanager
+package topologymanager
 import (
  	"strconv"
  	"strings"
@@ -21,95 +21,104 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/lifecycle"
 )
  
-type NumaManager interface {
+type Manager interface {
  	lifecycle.PodAdmitHandler
  	AddHintProvider(HintProvider)
  	RemovePod(podName string)
  	Store
  }
- 
-type numaManager struct {
- 	//The list of components registered with the NumaManager
- 	hintProviders []HintProvider
- 	//List of Containers and their NUMA Allocations
- 	podNUMAHints map[string]containers	
+
+type SocketMask struct {
+        Mask [][]int64
 }
- 
-//Interface to be implemented by Numa Allocators 
-type HintProvider interface {
-    	GetNUMAHints(resource string, amount int) NumaMask
-}
- 
-type Store interface {
-	GetAffinity(podUID string, containerName string) NumaMask
-}
- 
-type NumaMask struct {
-	Mask [][]int64
+
+type TopologyHints struct {
+	SocketAffinity SocketMask
 	Affinity bool
 }
  
-type containers map[string]NumaMask
-var _ NumaManager = &numaManager{}
-func NewNumaManager() NumaManager {
- 	glog.Infof("[numamanager] Creating numa mananager")
+type manager struct {
+ 	//The list of components registered with the Manager
+ 	hintProviders []HintProvider
+ 	//List of Containers and their Topology Allocations
+ 	podTopologyHints map[string]containers	
+}
+ 
+//Interface to be implemented by Topology Allocators 
+type HintProvider interface {
+    	GetTopologyHints(resource string, amount int) TopologyHints
+}
+ 
+type Store interface {
+	GetAffinity(podUID string, containerName string) TopologyHints
+}
+
+ 
+type containers map[string]TopologyHints
+var _ Manager = &manager{}
+func NewManager() Manager {
+ 	glog.Infof("[topologymanager] Creating topology manager")
  	var hp []HintProvider
  	pnh := make (map[string]containers)
- 	numaManager := &numaManager{
+ 	manager := &manager{
  		hintProviders: hp,
- 		podNUMAHints: pnh,
+ 		podTopologyHints: pnh,
  	}
  	
-	return numaManager
+	return manager
 }
 
-func (m *numaManager) GetAffinity(podUID string, containerName string) NumaMask {
- 	return m.podNUMAHints[podUID][containerName]
+func (m *manager) GetAffinity(podUID string, containerName string) TopologyHints {
+ 	return m.podTopologyHints[podUID][containerName]
 }
 
-func (m *numaManager) calculateNUMAAffinity(pod v1.Pod, container v1.Container) NumaMask { 
-	podNumaMask := NumaMask {
-                Mask: 		nil,
-		Affinity:       false,
-        }
-        
+func (m *manager) calculateTopologyAffinity(pod v1.Pod, container v1.Container) TopologyHints {
+	socketMask := SocketMask{
+		Mask:		nil,
+	}
+	
+	podTopologyHints := TopologyHints {
+		SocketAffinity:	socketMask,
+		Affinity: 	true,
+	}
+		
 	var maskHolder []string
 	count := 0 
-	var finalMask int64
-        for _, hp := range m.hintProviders {
+	var finalMaskValue int64
+        for _, hp := range m.hintProviders {	
 		for resource, amount := range container.Resources.Requests {
-			glog.Infof("Container Resource Name in NUMA Manager: %v, Amount: %v", resource, amount.Value())
-			numaMask := hp.GetNUMAHints(string(resource), int(amount.Value()))                          
-			if numaMask.Affinity && numaMask.Mask != nil {
+			glog.Infof("Container Resource Name in Topology Manager: %v, Amount: %v", resource, amount.Value())
+			topologyHints := hp.GetTopologyHints(string(resource), int(amount.Value()))
+			if topologyHints.Affinity && topologyHints.SocketAffinity.Mask != nil {
 				if count == 0 {
-					maskHolder = buildMaskHolder(numaMask.Mask)	
+					maskHolder = buildMaskHolder(topologyHints.SocketAffinity.Mask)
 					count++
 				}
-				glog.Infof("[numa manager] MaskHolder : %v", maskHolder)
+				glog.Infof("[topologymanager] MaskHolder : %v", maskHolder)
 				//Arrange int array into array of strings 
-				glog.Infof("[numa manager] %v is passed into arrange function",numaMask.Mask)   
-				arrangedMask := arrangeMask(numaMask.Mask)						
-				newMask := getNUMAAffinity(arrangedMask, maskHolder)
+				glog.Infof("[topologymanager] %v is passed into arrange function",topologyHints.SocketAffinity.Mask)   
+				arrangedMask := arrangeMask(topologyHints.SocketAffinity.Mask)						
+				newMask := getTopologyAffinity(arrangedMask, maskHolder)
 				//FIXME - take most suitable value from mask, not just random
-				glog.Infof("[numa manager] New Mask after getNUMAAffinity (new mask) : %v ",newMask)
-				finalMask = parseMask(newMask)
-				glog.Infof("[numamanager] Mask Int64 (finalMask): %v", finalMask)
+				glog.Infof("[topologymanager] New Mask after getTopologyAffinity (new mask) : %v ",newMask)
+				finalMaskValue = parseMask(newMask)
+				glog.Infof("[topologymanager] Mask Int64 (finalMaskValue): %v", finalMaskValue)
 				maskHolder = newMask
-				glog.Infof("[numa manager] New MaskHolder: %v", maskHolder) 
+				glog.Infof("[topologymanager] New MaskHolder: %v", maskHolder) 
      
-			} else if numaMask.Affinity && numaMask.Mask == nil {
-				glog.Infof("[numamanager] NO Numa Affinity.")
-				return NumaMask {
-					Mask:		nil,
-					Affinity:   	true,   
-				}       
+			} else if topologyHints.Affinity && topologyHints.SocketAffinity.Mask == nil {
+				glog.Infof("[topologymanager] NO Topology Affinity.")
+				return podTopologyHints
+			
 			}  
 		}
 	}
-	var inner []int64
-	inner = append(inner, finalMask)
-	podNumaMask.Mask = append(podNumaMask.Mask, inner)
-	return podNumaMask       
+	var topologyMaskFull [][]int64
+        var topologyMaskInner []int64 
+        topologyMaskInner = append(topologyMaskInner,finalMaskValue)
+        topologyMaskFull = append(topologyMaskFull, topologyMaskInner)
+        podTopologyHints.SocketAffinity.Mask = topologyMaskFull
+        return podTopologyHints      
 }
 
 func buildMaskHolder(mask [][]int64) []string {
@@ -133,28 +142,27 @@ func buildMaskHolder(mask [][]int64) []string {
 	return maskHolder
 }
 
-
-func getNUMAAffinity(arrangedMask, maskHolder []string) []string {
-	var numaTest []string
+func getTopologyAffinity(arrangedMask, maskHolder []string) []string {
+	var topologyTemp []string
         for i:= 0; i < (len(maskHolder)); i++ {
         	for j:= 0; j < (len(arrangedMask)); j++ {
                		tempStr := andOperation(maskHolder[i],arrangedMask[j])
                       	if strings.Contains(tempStr, "1") {
-                               	numaTest = append(numaTest, tempStr )
+                               	topologyTemp = append(topologyTemp, tempStr )
                       	}
                	}
      	}
         duplicates := map[string]bool{}
-        for v:= range numaTest {
-        	duplicates[numaTest[v]] = true
+        for v:= range topologyTemp {
+        	duplicates[topologyTemp[v]] = true
         }
        	// Place all keys from the map into a slice.
-       	numaResult := []string{}
+       	topologyResult := []string{}
       	for key, _ := range duplicates {
-       		numaResult = append(numaResult, key)
+       		topologyResult = append(topologyResult, key)
      	}
 	
-	return numaResult
+	return topologyResult
 }
 
 func parseMask(mask []string) int64 {
@@ -218,41 +226,42 @@ func andOperation(val1, val2 string) (string) {
 	return finalStr
 }
 
-func (m *numaManager) AddHintProvider(h HintProvider) {
+func (m *manager) AddHintProvider(h HintProvider) {
  	m.hintProviders = append(m.hintProviders, h)
 }
 
-func (m *numaManager) RemovePod (podName string) {
+func (m *manager) RemovePod (podName string) {
  	glog.Infof("Remove pod func")
 }
 
-func (m *numaManager) Admit(attrs *lifecycle.PodAdmitAttributes) lifecycle.PodAdmitResult {
- 	glog.Infof("[numamanager] NUMA Admit Handler")
+func (m *manager) Admit(attrs *lifecycle.PodAdmitAttributes) lifecycle.PodAdmitResult {
+ 	glog.Infof("[topologymanager] Topology Admit Handler")
  	pod := attrs.Pod
  	c := make (containers)
  	
-	glog.Infof("[numamanager] Pod QoS Level: %v", pod.Status.QOSClass)
+	glog.Infof("[topologymanager] Pod QoS Level: %v", pod.Status.QOSClass)
 	
 	qosClass := pod.Status.QOSClass
 	
 	if qosClass == "Guaranteed" {
 		for _, container := range pod.Spec.Containers {
-			result := m.calculateNUMAAffinity(*pod, container)
-			if result.Affinity && result.Mask == nil {
+			result := m.calculateTopologyAffinity(*pod, container)
+			if result.Affinity == true && result.SocketAffinity.Mask == nil {
 				return lifecycle.PodAdmitResult{
 					Admit:   false,
-					Reason:	 "Numa Affinity Error",
-					Message: "Resources cannot be allocated with Numa Locality",
+					Reason:	 "Topology Affinity Error",
+					Message: "Resources cannot be allocated with Topology Locality",
+					
 				}
 			}
 			c[container.Name] = result		
 		}
 	
-		m.podNUMAHints[string(pod.UID)] = c
-		glog.Infof("[numamanager] NUMA Affinity for Pod: %v are %v", pod.UID, m.podNUMAHints[string(pod.UID)])
+		m.podTopologyHints[string(pod.UID)] = c
+		glog.Infof("[topologymanager] Topology Affinity for Pod: %v are %v", pod.UID, m.podTopologyHints[string(pod.UID)])
 	
 	} else {
-		glog.Infof("[numamanager] NUMA Manager only affinitises Guaranteed pods.")
+		glog.Infof("[topologymanager] Topology Manager only affinitises Guaranteed pods.")
 	}
 	
 	return lifecycle.PodAdmitResult{

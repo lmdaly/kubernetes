@@ -48,7 +48,7 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/cadvisor"
 	"k8s.io/kubernetes/pkg/kubelet/cm/cpumanager"
 	"k8s.io/kubernetes/pkg/kubelet/cm/devicemanager"
-	"k8s.io/kubernetes/pkg/kubelet/cm/numamanager"
+	"k8s.io/kubernetes/pkg/kubelet/cm/topologymanager"
 	cmutil "k8s.io/kubernetes/pkg/kubelet/cm/util"
 	"k8s.io/kubernetes/pkg/kubelet/config"
 	kubecontainer "k8s.io/kubernetes/pkg/kubelet/container"
@@ -135,8 +135,9 @@ type containerManagerImpl struct {
 	deviceManager devicemanager.Manager
 	// Interface for CPU affinity management.
 	cpuManager cpumanager.Manager
-	// Interface for NUMA resource co-ordination
-    numaManager numamanager.NumaManager
+	// Interface for Topology resource co-ordination
+    	topologyManager topologymanager.Manager
+
 }
 
 type features struct {
@@ -260,9 +261,9 @@ func NewContainerManager(mountUtil mount.Interface, cadvisorInterface cadvisor.I
 		return nil, err
 	}
 	
-	// setup numa manager
-    numaManager := numamanager.NewNumaManager()
-	glog.Infof("[numamanager] Initilizing Numa Manager...")
+	// setup topology manager
+    	topologyManager := topologymanager.NewManager()
+	glog.Infof("[topologymanager] Initilizing Topology Manager...")
 
 	cm := &containerManagerImpl{
 		cadvisorInterface:   cadvisorInterface,
@@ -274,13 +275,13 @@ func NewContainerManager(mountUtil mount.Interface, cadvisorInterface cadvisor.I
 		cgroupRoot:          cgroupRoot,
 		recorder:            recorder,
 		qosContainerManager: qosContainerManager,
-		numaManager:         numaManager,
+		topologyManager:     topologyManager,
 	}
 
 	klog.Infof("Creating device plugin manager: %t", devicePluginEnabled)
 	if devicePluginEnabled {
-		cm.deviceManager, err = devicemanager.NewManagerImpl(numaManager)
-		cm.numaManager.AddHintProvider(cm.deviceManager)
+		cm.deviceManager, err = devicemanager.NewManagerImpl(topologyManager)
+		cm.topologyManager.AddHintProvider(cm.deviceManager)
 	} else {
 		cm.deviceManager, err = devicemanager.NewManagerStub()
 	}
@@ -296,13 +297,13 @@ func NewContainerManager(mountUtil mount.Interface, cadvisorInterface cadvisor.I
 			machineInfo,
 			cm.GetNodeAllocatableReservation(),
 			nodeConfig.KubeletRootDir,
-			numaManager,
+			topologyManager,
 		)
 		if err != nil {
 			klog.Errorf("failed to initialize cpu manager: %v", err)
 			return nil, err
 		}
-		 cm.numaManager.AddHintProvider(cm.cpuManager)
+		 cm.topologyManager.AddHintProvider(cm.cpuManager)
 	}
 
 	return cm, nil
@@ -643,8 +644,8 @@ func (cm *containerManagerImpl) UpdatePluginResources(node *schedulernodeinfo.No
 	return cm.deviceManager.Allocate(node, attrs)
 }
 
-func (cm *containerManagerImpl) GetNumaPodAdmitHandler() numamanager.NumaManager {
-       return cm.numaManager
+func (cm *containerManagerImpl) GetTopologyPodAdmitHandler() topologymanager.Manager {
+       return cm.topologyManager
 }
 
 func (cm *containerManagerImpl) SystemCgroupsLimit() v1.ResourceList {

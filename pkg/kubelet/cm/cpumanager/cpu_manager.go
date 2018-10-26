@@ -32,7 +32,7 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/cm/cpumanager/topology"
 	"k8s.io/kubernetes/pkg/kubelet/cm/cpuset"
 	kubecontainer "k8s.io/kubernetes/pkg/kubelet/container"
-	"k8s.io/kubernetes/pkg/kubelet/cm/numamanager"
+	"k8s.io/kubernetes/pkg/kubelet/cm/topologymanager"
 	"k8s.io/kubernetes/pkg/kubelet/status"
 )
 
@@ -66,9 +66,9 @@ type Manager interface {
 	// State returns a read-only interface to the internal CPU manager state.
 	State() state.Reader
         
-       // NumaManager HintProvider provider indicates the Device Manager implements the NUMA Manager Interface
-       // and is consulted to make NUMA aware resource alignments
-       GetNUMAHints(resource string, amount int) numamanager.NumaMask
+       // Manager HintProvider provider indicates the Device Manager implements the Topology Manager Interface
+       // and is consulted to make Topology aware resource alignments
+       GetTopologyHints(resource string, amount int) topologymanager.TopologyHints
 }
 
 type manager struct {
@@ -102,7 +102,7 @@ type manager struct {
 var _ Manager = &manager{}
 
 // NewManager creates new cpu manager based on provided policy
-func NewManager(cpuPolicyName string, reconcilePeriod time.Duration, machineInfo *cadvisorapi.MachineInfo, nodeAllocatableReservation v1.ResourceList, stateFileDirectory string, affinity numamanager.Store) (Manager, error) {
+func NewManager(cpuPolicyName string, reconcilePeriod time.Duration, machineInfo *cadvisorapi.MachineInfo, nodeAllocatableReservation v1.ResourceList, stateFileDirectory string, affinity topologymanager.Store) (Manager, error) {
 	var policy Policy
 
 	switch policyName(cpuPolicyName) {
@@ -156,20 +156,22 @@ func NewManager(cpuPolicyName string, reconcilePeriod time.Duration, machineInfo
 	return manager, nil
 }
 
-func (m *manager) GetNUMAHints(resource string, amount int) numamanager.NumaMask {
-	//For testing purposes - manager should consult available resources and make numa mask based on container request 
+func (m *manager) GetTopologyHints(resource string, amount int) topologymanager.TopologyHints {
+	//For testing purposes - manager should consult available resources and make topology mask based on container request 
 	var amount64 int64
 	amount64 = int64(amount)
 	var nm0 [][]int64
-
-    	// Check string "cpu" here
+	socketMask := topologymanager.SocketMask{
+		Mask:   	nm0,
+	}
+    	
+	// Check string "cpu" here
 	if resource != "cpu" {
         	glog.Infof("Resource %v not managed by CPU Manager", resource)
-        	return numamanager.NumaMask{
-            		Mask:           nm0,
-            		Affinity:       false,
-      	 	}
-
+        	return topologymanager.TopologyHints{
+			SocketAffinity: socketMask,
+			Affinity:       false,
+       	 	}
     	}
 	
 	glog.Infof("[cpumanager] Guaranteed CPUs detected: %v", amount)
@@ -239,12 +241,14 @@ func (m *manager) GetNUMAHints(resource string, amount int) numamanager.NumaMask
 		divided = append(divided, arr)
         }
 
-       	glog.Infof("[numa manager] Number of Assignable CPUs per Socket: %v", CPUsInSocketSize)	
-	glog.Infof("[numa manager] NUMA Affinities for pod (divided array): %v", divided)	
-	
-	return numamanager.NumaMask{
-                Mask:     divided,     
-                Affinity: true,
+        glog.Infof("[cpumanager] Topology Affinities for pod (divided array): %v", divided)
+	glog.Infof("[cpumanager] Number of Assignable CPUs per Socket: %v", CPUsInSocketSize)	
+	glog.Infof("[cpumanager] Topology Affinities for pod (divided array): %v", divided)	
+	 
+	socketMask.Mask = divided	
+	return topologymanager.TopologyHints{
+		SocketAffinity: socketMask, 
+		Affinity: true,
         }
 }
 

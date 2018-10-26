@@ -1,8 +1,8 @@
-# PoC NUMA Manager for Kubernetes
+# PoC Topology Manager for Kubernetes
 
 ## Overview
 
-NUMA Manager for Kubernetes co-ordinates NUMA Node locaility for devices managed by device plugins, CPUs managed by the CPU Manager.
+Topology Manager for Kubernetes co-ordinates Topology Node locaility for devices managed by device plugins, CPUs managed by the CPU Manager.
 
 This implementation is based on the following proposal: https://github.com/kubernetes/community/pull/1680
 
@@ -44,7 +44,7 @@ Feedback is welcome!
 
 9. Create a Guaranteed Pod requesting CPU and Memory
 
-10. Search for *numamanager* in the Kubelet logs
+10. Search for *topologymanager* in the Kubelet logs
 *Logs can be output to a file by editing the KUBE_LOGTOSTDERR flag with "--logtostderr=false --log-dir=/var/logs/kubernetes"*
 
 

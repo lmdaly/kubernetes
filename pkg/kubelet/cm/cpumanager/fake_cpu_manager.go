@@ -20,7 +20,7 @@ import (
 	"k8s.io/api/core/v1"
 	"k8s.io/klog"
 	"k8s.io/kubernetes/pkg/kubelet/cm/cpumanager/state"
-	"k8s.io/kubernetes/pkg/kubelet/cm/numamanager"
+	"k8s.io/kubernetes/pkg/kubelet/cm/topologymanager"
 	"k8s.io/kubernetes/pkg/kubelet/status"
 )
 
@@ -28,7 +28,7 @@ type fakeManager struct {
 	state state.State
 }
 
-func(m *fakeManager) GetAffinity() numamanager.Store {
+func(m *fakeManager) GetAffinity() topologymanager.Store {
        return nil
 }
 
@@ -51,9 +51,9 @@ func (m *fakeManager) RemoveContainer(containerID string) error {
 	return nil
 }
 
-func (m *fakeManager) GetNUMAHints(resource string, amount int) numamanager.NumaMask {
-       glog.Infof("[fake cpumanager] Get NUMA Hints")
-       return numamanager.NumaMask{}
+func (m *fakeManager) GetTopologyHints(resource string, amount int) topologymanager.TopologyHints {
+       glog.Infof("[fake cpumanager] Get Topology Hints")
+       return topologymanager.TopologyHints{}
 }
 
 func (m *fakeManager) State() state.Reader {

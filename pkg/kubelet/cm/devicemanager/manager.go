@@ -38,7 +38,7 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/checkpointmanager/errors"
 	"k8s.io/kubernetes/pkg/kubelet/cm/devicemanager/checkpoint"
 	"k8s.io/kubernetes/pkg/kubelet/config"
-	"k8s.io/kubernetes/pkg/kubelet/cm/numamanager"
+	"k8s.io/kubernetes/pkg/kubelet/cm/topologymanager"
 	"k8s.io/kubernetes/pkg/kubelet/lifecycle"
 	"k8s.io/kubernetes/pkg/kubelet/metrics"
 	watcher "k8s.io/kubernetes/pkg/kubelet/util/pluginwatcher"
@@ -90,8 +90,8 @@ type ManagerImpl struct {
 	podDevices        podDevices
 	checkpointManager checkpointmanager.CheckpointManager
     
-    //Store of NUMA Affinties that the Device Manager can query
-    numaAffinityStore numamanager.Store
+    //Store of Topology Affinties that the Device Manager can query
+    topologyAffinityStore topologymanager.Store
 }
 
 type endpointInfo struct {
@@ -105,11 +105,11 @@ func (s *sourcesReadyStub) AddSource(source string) {}
 func (s *sourcesReadyStub) AllReady() bool          { return true }
 
 // NewManagerImpl creates a new manager.
-func NewManagerImpl(numaAffinityStore numamanager.Store) (*ManagerImpl, error) {
-	return newManagerImpl(pluginapi.KubeletSocket, numaAffinityStore)
+func NewManagerImpl(topologyAffinityStore topologymanager.Store) (*ManagerImpl, error) {
+	return newManagerImpl(pluginapi.KubeletSocket, topologyAffinityStore)
 }
 
-func newManagerImpl(socketPath string, numaAffinityStore numamanager.Store) (*ManagerImpl, error) {
+func newManagerImpl(socketPath string, topologyAffinityStore topologymanager.Store) (*ManagerImpl, error) {
 	glog.V(2).Infof("Creating Device Plugin manager at %s", socketPath)
 
 	if socketPath == "" || !filepath.IsAbs(socketPath) {
@@ -126,7 +126,7 @@ func newManagerImpl(socketPath string, numaAffinityStore numamanager.Store) (*Ma
 		allocatedDevices:   make(map[string]sets.String),
 		pluginOpts:         make(map[string]*pluginapi.DevicePluginOptions),
 		podDevices:         make(podDevices),
-        numaAffinityStore:  numaAffinityStore,
+        topologyAffinityStore:  topologyAffinityStore,
 	}
 	manager.callback = manager.genericDeviceUpdateCallback
 
@@ -143,26 +143,27 @@ func newManagerImpl(socketPath string, numaAffinityStore numamanager.Store) (*Ma
 	return manager, nil
 }
 
-func (m *ManagerImpl) GetNUMAHints(resource string, amount int) numamanager.NumaMask {
+func (m *ManagerImpl) GetTopologyHints(resource string, amount int) topologymanager.TopologyHints {
+        socketMask := topologymanager.SocketMask{
+                Mask:           nil,      
+        }	
 	devices := m.Devices()
-    	var nm [][]int64
-
-    	glog.Infof("Devices in GetNUMAHints: %v", devices)
+    	glog.Infof("Devices in GetTopologyHints: %v", devices)
     
     	glog.Infof("Container Resource Name in Device Manager: %v, Amount: %v", resource, amount)
     	if !m.isDevicePluginResource(resource) {
         	glog.Infof("Resource not managed by Device Manager")
-        	return numamanager.NumaMask{
-            		Mask:           nm,
-            		Affinity:       false,
+        	return topologymanager.TopologyHints{
+			SocketAffinity: socketMask, 
+			Affinity: 	false,
         	}
     	}    
     	glog.Infof("Resource managed by Device Manager")
     	if _, ok := m.healthyDevices[resource]; !ok {
         	glog.Infof("No healthy devices available for ")
-        	return numamanager.NumaMask{
-            		Mask:           nm,
-            		Affinity:       false,
+        	return topologymanager.TopologyHints{
+			SocketAffinity:	socketMask,
+			Affinity: 	false,
         	}
     	} 
 
@@ -173,9 +174,9 @@ func (m *ManagerImpl) GetNUMAHints(resource string, amount int) numamanager.Numa
 	available := m.healthyDevices[resource].Difference(devicesInUse)
 	if int(available.Len()) < amount {
 		glog.Infof("requested number of devices unavailable for %s. Requested: %d, Available: %d", resource, amount, available.Len())
-        	return numamanager.NumaMask{
-            	Mask:           nm,
-            	Affinity:       false,
+        	return topologymanager.TopologyHints{
+			SocketAffinity: socketMask,
+			Affinity: 	false,
         	}
 	}
     	glog.Infof("[device-manager] Available devices for resource: %v", available)	
@@ -191,18 +192,17 @@ func (m *ManagerImpl) GetNUMAHints(resource string, amount int) numamanager.Numa
                     			duplicate_frequency[socket] += 1
                 		} else {
                     			duplicate_frequency[socket] = 1
-                		}					
+                		}			
 			}						
 		}
 	}	
 	glog.Infof("[device-manager] Sockets with device: %v", socketValues)
-	
 	var count, devicesTotal int64 = 0, 0 	
 	var amount64 int64
 	amount64 = int64(amount)	
 	var availableSockets []int64
 	var notEmptySkts []int64
-	// Loop through device counts (duplicates of each socket) - return if resources not available on a socket
+	// Loop through device counts (duplicates of each socket) 
 	for socket, devicesPerSkt := range duplicate_frequency{
  		glog.Infof("[device-manager] Socket : %d , number of devices : %d", socket, devicesPerSkt)
 		devicesTotal = devicesTotal + devicesPerSkt
@@ -231,23 +231,24 @@ func (m *ManagerImpl) GetNUMAHints(resource string, amount int) numamanager.Numa
         }
         glog.Infof("[device-manager] Largest socket that is NOT empty: %v", largestSkt)
 	
-	var socketMask []int64
+	var mask []int64
 	fullMask:= make([][]int64,len(availableSockets))
 	var i int64
-	// Use largest socket to construct 2D slice (mask) for return to NUMA Manager
+	// Use largest socket to construct 2D slice (mask) for return to Topology Manager
 	for j, socket := range availableSockets {
-		socketMask = nil	
+		mask = nil	
 		for i = 0; i <= largestSkt; i++ {
             		if i == socket {
-                		socketMask = append(socketMask, 1)
+                		mask = append(mask, 1)
             		} else {
-                		socketMask = append(socketMask, 0)
+                		mask = append(mask, 0)
             		}
-        	}			
-		fullMask[j] = socketMask 
+        	}
+		fullMask[j] = mask 
 	}	
 	
-	//Build final slice for full mask - overall affinity for preferred state (only if more than 1 available skt)
+	//Build final slice for full mask - overall affinity for preferred state (only if more than 1 available socket
+	// or if no socket available but enough devices are spread across sockets))
 	overallMask := make([]int64, largestSkt+1)
 	if (len(fullMask) > 1) || ((len(fullMask) == 0) && (devicesTotal >= amount64)) {
 		var k int64
@@ -260,10 +261,11 @@ func (m *ManagerImpl) GetNUMAHints(resource string, amount int) numamanager.Numa
 		}
 		fullMask = append(fullMask,overallMask)
 	}
-	glog.Infof("[devicemanager] NUMA Affinities for %v %v resource(s) are %v", amount, resource, fullMask)
-	return numamanager.NumaMask{
-                  Mask:           fullMask,
-                  Affinity:       true,
+	glog.Infof("[devicemanager] Topology Affinities for %v %v resource(s) are %v", amount, resource, fullMask)
+	socketMask.Mask = fullMask	
+	return topologymanager.TopologyHints{
+		SocketAffinity:	socketMask,
+		Affinity:	true,
         }
 }
 

@@ -25,7 +25,7 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/cm/cpumanager/state"
 	"k8s.io/kubernetes/pkg/kubelet/cm/cpumanager/topology"
 	"k8s.io/kubernetes/pkg/kubelet/cm/cpuset"
-	"k8s.io/kubernetes/pkg/kubelet/cm/numamanager"
+	"k8s.io/kubernetes/pkg/kubelet/cm/topologymanager"
 )
 
 // PolicyStatic is the name of the static policy
@@ -74,8 +74,8 @@ type staticPolicy struct {
 	topology *topology.CPUTopology
 	// set of CPUs that is not available for exclusive assignment
 	reserved cpuset.CPUSet
-        // numa manager reference to get container NUMA affinity
-    	affinity numamanager.Store
+        // topology manager reference to get container Topology affinity
+    	affinity topologymanager.Store
 }
 
 // Ensure staticPolicy implements Policy interface
@@ -84,7 +84,7 @@ var _ Policy = &staticPolicy{}
 // NewStaticPolicy returns a CPU manager policy that does not change CPU
 // assignments for exclusively pinned guaranteed containers after the main
 // container process starts.
-func NewStaticPolicy(topology *topology.CPUTopology, numReservedCPUs int, affinity numamanager.Store) Policy {
+func NewStaticPolicy(topology *topology.CPUTopology, numReservedCPUs int, affinity topologymanager.Store) Policy {
 	allCPUs := topology.CPUDetails.CPUs()
 	// takeByTopology allocates CPUs associated with low-numbered cores from
 	// allCPUs.
@@ -184,17 +184,17 @@ func (p *staticPolicy) AddContainer(s state.State, pod *v1.Pod, container *v1.Co
 			return nil
 		}
 
-		//Call NUMA Manager to get Container affinity
-        	containerNumaMask := p.affinity.GetAffinity(string(pod.UID), container.Name)
-        	glog.Infof("[cpumanager] Pod %v, Container %v NUMA Affinity is: %v", pod.UID, container.Name, containerNumaMask)
+		//Call Topology Manager to get Container affinity
+        	containerTopologyHints := p.affinity.GetAffinity(string(pod.UID), container.Name)
+        	glog.Infof("[cpumanager] Pod %v, Container %v Topology Affinity is: %v", pod.UID, container.Name, containerTopologyHints)
 
         	//Socket Parsing temporary hack - needs addressing
                 sockets := make(map[int]bool)
-                if containerNumaMask.Mask[0][0] == 01 {
+                if containerTopologyHints.SocketAffinity.Mask[0][0] == 01 {
                 	sockets[1] = true
-            	} else if containerNumaMask.Mask[0][0] == 10 {
+            	} else if containerTopologyHints.SocketAffinity.Mask[0][0] == 10 {
                 	sockets[0] = true
-            	} else if containerNumaMask.Mask[0][0] == 11 {
+            	} else if containerTopologyHints.SocketAffinity.Mask[0][0] == 11 {
                 	sockets[1] = true
                 	sockets[0] = true
             	}
