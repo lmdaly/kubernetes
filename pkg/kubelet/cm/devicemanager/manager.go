@@ -94,11 +94,6 @@ type ManagerImpl struct {
     topologyAffinityStore topologymanager.Store
 }
 
-type endpointInfo struct {
-	e    endpoint
-	opts *pluginapi.DevicePluginOptions
-}
-
 type sourcesReadyStub struct{}
 
 func (s *sourcesReadyStub) AddSource(source string) {}
