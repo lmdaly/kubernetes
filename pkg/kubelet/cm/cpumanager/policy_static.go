@@ -188,17 +188,14 @@ func (p *staticPolicy) AddContainer(s state.State, pod *v1.Pod, container *v1.Co
         	containerTopologyHints := p.affinity.GetAffinity(string(pod.UID), container.Name)
         	glog.Infof("[cpumanager] Pod %v, Container %v Topology Affinity is: %v", pod.UID, container.Name, containerTopologyHints)
 
-        	//Socket Parsing temporary hack - needs addressing
                 sockets := make(map[int]bool)
-                if containerTopologyHints.SocketAffinity.Mask[0][0] == 01 {
-                	sockets[1] = true
-            	} else if containerTopologyHints.SocketAffinity.Mask[0][0] == 10 {
-                	sockets[0] = true
-            	} else if containerTopologyHints.SocketAffinity.Mask[0][0] == 11 {
-                	sockets[1] = true
-                	sockets[0] = true
-            	}
-
+                for _, bitMasks := range containerTopologyHints.SocketAffinity.Mask {
+                    for counter, bit := range bitMasks {
+                        if bit == int64(1) {
+                            sockets[counter] = true
+                        }
+                    }
+                }
 		cpuset, err := p.allocateCPUs(s, numCPUs, sockets)
 		if err != nil {
 			klog.Errorf("[cpumanager] unable to allocate %d CPUs (container id: %s, error: %v)", numCPUs, containerID, err)

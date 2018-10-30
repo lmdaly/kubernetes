@@ -84,8 +84,8 @@ func (m *manager) calculateTopologyAffinity(pod v1.Pod, container v1.Container) 
 		
 	var maskHolder []string
 	count := 0 
-	var finalMaskValue int64
-        for _, hp := range m.hintProviders {	
+	var finalMaskValue []int64
+        for _, hp := range m.hintProviders {
 		for resource, amount := range container.Resources.Requests {
 			glog.Infof("Container Resource Name in Topology Manager: %v, Amount: %v", resource, amount.Value())
 			topologyHints := hp.GetTopologyHints(string(resource), int(amount.Value()))
@@ -114,13 +114,11 @@ func (m *manager) calculateTopologyAffinity(pod v1.Pod, container v1.Container) 
 		}
 	}
 	var topologyMaskFull [][]int64
-        var topologyMaskInner []int64 
-        topologyMaskInner = append(topologyMaskInner,finalMaskValue)
-        topologyMaskFull = append(topologyMaskFull, topologyMaskInner)
+        topologyMaskFull = append(topologyMaskFull, finalMaskValue)
         podTopologyHints.SocketAffinity.Mask = topologyMaskFull
         return podTopologyHints      
-}
 
+}
 func buildMaskHolder(mask [][]int64) []string {
 	var maskHolder []string
 	outerLen := len(mask)
@@ -165,29 +163,20 @@ func getTopologyAffinity(arrangedMask, maskHolder []string) []string {
 	return topologyResult
 }
 
-func parseMask(mask []string) int64 {
-	var maskStr string
-	var countSlice []int64
-	for i := 0; i < len(mask); i++ {
-		num := int64(strings.Count(mask[i], "1"))
-		countSlice = append(countSlice, num)		
-        }
-	min := countSlice[0]
-	for i := 0; i < len(countSlice); i++ {
-		if (countSlice[i] < min) && (countSlice[i] >= 1) {
-			min = countSlice[i]
-		}			
+func parseMask(mask []string) []int64 {
+	maskStr := mask[0]
+        glog.Infof("Mask string in ParseMask: %v", maskStr)
+	var maskInt []int64
+	for _, char := range maskStr {
+		convertedStr, err := strconv.Atoi(string(char))
+		if err != nil {
+			glog.Errorf("Could not convert string to int. Err: %v", err)
+			return maskInt
+		}
+		maskInt = append(maskInt, int64(convertedStr))  
 	}
-	for i := 0; i < len(countSlice); i++ {
-		if min == countSlice[i]{
-			maskStr = mask[i]
-			break
-		}	
-	}
-	maskInt, _ := strconv.Atoi(maskStr)
-	var maskInt64 int64
-	maskInt64 = int64(maskInt)
-	return maskInt64
+	glog.Infof("Mask Int in Parse Mask: %v", maskInt)
+	return maskInt         
 }
 
 func arrangeMask(mask [][]int64) []string {
