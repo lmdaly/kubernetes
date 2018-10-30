@@ -166,15 +166,23 @@ func getTopologyAffinity(arrangedMask, maskHolder []string) []string {
 }
 
 func parseMask(mask []string) int64 {
-	maskLen := len(mask)
 	var maskStr string
-	for i := 0; i < maskLen; i++ {
-		if strings.Contains( mask[i], "1") {
+	var countSlice []int64
+	for i := 0; i < len(mask); i++ {
+		num := int64(strings.Count(mask[i], "1"))
+		countSlice = append(countSlice, num)		
+        }
+	min := countSlice[0]
+	for i := 0; i < len(countSlice); i++ {
+		if (countSlice[i] < min) && (countSlice[i] >= 1) {
+			min = countSlice[i]
+		}			
+	}
+	for i := 0; i < len(countSlice); i++ {
+		if min == countSlice[i]{
 			maskStr = mask[i]
 			break
-		} else {
-			maskStr = "0"
-		}
+		}	
 	}
 	maskInt, _ := strconv.Atoi(maskStr)
 	var maskInt64 int64
