@@ -186,29 +186,17 @@ func (m *ManagerImpl) GetTopologyHints(resource string, amount int) topologymana
                     			duplicate_frequency[socket] += 1
                 		} else {
                     			duplicate_frequency[socket] = 1
-<<<<<<< HEAD
                 		}			
-=======
-                		}					
->>>>>>> 85dbafd801463af0cccb7d4f97fda3c9378e04ec
 			}						
 		}
 	}	
 	glog.Infof("[device-manager] Sockets with device: %v", socketValues)
-<<<<<<< HEAD
-=======
-	
->>>>>>> 85dbafd801463af0cccb7d4f97fda3c9378e04ec
 	var count, devicesTotal int64 = 0, 0 	
 	var amount64 int64
 	amount64 = int64(amount)	
 	var availableSockets []int64
 	var notEmptySkts []int64
-<<<<<<< HEAD
 	// Loop through device counts (duplicates of each socket) 
-=======
-	// Loop through device counts (duplicates of each socket) - return if resources not available on a socket
->>>>>>> 85dbafd801463af0cccb7d4f97fda3c9378e04ec
 	for socket, devicesPerSkt := range duplicate_frequency{
  		glog.Infof("[device-manager] Socket : %d , number of devices : %d", socket, devicesPerSkt)
 		devicesTotal = devicesTotal + devicesPerSkt
@@ -237,7 +225,6 @@ func (m *ManagerImpl) GetTopologyHints(resource string, amount int) topologymana
         }
         glog.Infof("[device-manager] Largest socket that is NOT empty: %v", largestSkt)
 	
-<<<<<<< HEAD
 	var mask []int64
 	fullMask:= make([][]int64,len(availableSockets))
 	var i int64
@@ -256,25 +243,6 @@ func (m *ManagerImpl) GetTopologyHints(resource string, amount int) topologymana
 	
 	//Build final slice for full mask - overall affinity for preferred state (only if more than 1 available socket
 	// or if no socket available but enough devices are spread across sockets))
-=======
-	var socketMask []int64
-	fullMask:= make([][]int64,len(availableSockets))
-	var i int64
-	// Use largest socket to construct 2D slice (mask) for return to NUMA Manager
-	for j, socket := range availableSockets {
-		socketMask = nil	
-		for i = 0; i <= largestSkt; i++ {
-            		if i == socket {
-                		socketMask = append(socketMask, 1)
-            		} else {
-                		socketMask = append(socketMask, 0)
-            		}
-        	}			
-		fullMask[j] = socketMask 
-	}	
-	
-	//Build final slice for full mask - overall affinity for preferred state (only if more than 1 available skt)
->>>>>>> 85dbafd801463af0cccb7d4f97fda3c9378e04ec
 	overallMask := make([]int64, largestSkt+1)
 	if (len(fullMask) > 1) || ((len(fullMask) == 0) && (devicesTotal >= amount64)) {
 		var k int64
@@ -287,18 +255,11 @@ func (m *ManagerImpl) GetTopologyHints(resource string, amount int) topologymana
 		}
 		fullMask = append(fullMask,overallMask)
 	}
-<<<<<<< HEAD
 	glog.Infof("[devicemanager] Topology Affinities for %v %v resource(s) are %v", amount, resource, fullMask)
 	socketMask.Mask = fullMask	
 	return topologymanager.TopologyHints{
 		SocketAffinity:	socketMask,
 		Affinity:	true,
-=======
-	glog.Infof("[devicemanager] NUMA Affinities for %v %v resource(s) are %v", amount, resource, fullMask)
-	return numamanager.NumaMask{
-                  Mask:           fullMask,
-                  Affinity:       true,
->>>>>>> 85dbafd801463af0cccb7d4f97fda3c9378e04ec
         }
 }
 
@@ -756,19 +717,11 @@ func (m *ManagerImpl) devicesToAllocate(podUID, contName, resource string, requi
     
     	//temporary hack - needs addressing
     	sockets := make(map[int]bool)
-<<<<<<< HEAD
     	if podTopologyAffinity.SocketAffinity.Mask[0][0] == 01 {
         	sockets[1] = true
     	} else if podTopologyAffinity.SocketAffinity.Mask[0][0] == 10 {
         	sockets[0] = true
     	} else if podTopologyAffinity.SocketAffinity.Mask[0][0] == 11 {
-=======
-    	if podNUMAAffinity.Mask[0][0] == 01 {
-        	sockets[1] = true
-    	} else if podNUMAAffinity.Mask[0][0] == 10 {
-        	sockets[0] = true
-    	} else if podNUMAAffinity.Mask[0][0] == 11 {
->>>>>>> 85dbafd801463af0cccb7d4f97fda3c9378e04ec
         	sockets[1] = true
         	sockets[0] = true
     	}
