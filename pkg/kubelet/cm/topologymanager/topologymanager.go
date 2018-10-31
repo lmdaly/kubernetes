@@ -84,8 +84,8 @@ func (m *manager) calculateTopologyAffinity(pod v1.Pod, container v1.Container) 
 		
 	var maskHolder []string
 	count := 0 
-	var finalMaskValue int64
-        for _, hp := range m.hintProviders {	
+	var finalMaskValue []int64
+        for _, hp := range m.hintProviders {
 		for resource, amount := range container.Resources.Requests {
 			glog.Infof("Container Resource Name in Topology Manager: %v, Amount: %v", resource, amount.Value())
 			topologyHints := hp.GetTopologyHints(string(resource), int(amount.Value()))
@@ -114,13 +114,11 @@ func (m *manager) calculateTopologyAffinity(pod v1.Pod, container v1.Container) 
 		}
 	}
 	var topologyMaskFull [][]int64
-        var topologyMaskInner []int64 
-        topologyMaskInner = append(topologyMaskInner,finalMaskValue)
-        topologyMaskFull = append(topologyMaskFull, topologyMaskInner)
+        topologyMaskFull = append(topologyMaskFull, finalMaskValue)
         podTopologyHints.SocketAffinity.Mask = topologyMaskFull
         return podTopologyHints      
-}
 
+}
 func buildMaskHolder(mask [][]int64) []string {
 	var maskHolder []string
 	outerLen := len(mask)
@@ -184,10 +182,8 @@ func parseMask(mask []string) int64 {
 			break
 		}	
 	}
-	maskInt, _ := strconv.Atoi(maskStr)
-	var maskInt64 int64
-	maskInt64 = int64(maskInt)
-	return maskInt64
+	glog.Infof("Mask Int in Parse Mask: %v", maskInt)
+	return maskInt         
 }
 
 func arrangeMask(mask [][]int64) []string {

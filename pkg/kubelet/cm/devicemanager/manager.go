@@ -715,17 +715,16 @@ func (m *ManagerImpl) devicesToAllocate(podUID, contName, resource string, requi
     	podTopologyAffinity := m.topologyAffinityStore.GetAffinity(podUID, contName)
     	glog.Infof("Topology Affinities for pod %v container %v are: %v", podUID, contName, podTopologyAffinity)
     
-    	//temporary hack - needs addressing
     	sockets := make(map[int]bool)
-    	if podTopologyAffinity.SocketAffinity.Mask[0][0] == 01 {
-        	sockets[1] = true
-    	} else if podTopologyAffinity.SocketAffinity.Mask[0][0] == 10 {
-        	sockets[0] = true
-    	} else if podTopologyAffinity.SocketAffinity.Mask[0][0] == 11 {
-        	sockets[1] = true
-        	sockets[0] = true
-    	}
-    	allocated := available.UnsortedList()[:needed]
+    	for _, bitMasks := range podTopologyAffinity.SocketAffinity.Mask {
+       		for counter, bit := range bitMasks {
+                	if bit == int64(1) {
+                        	sockets[counter] = true
+                	}
+            	}
+        }
+
+        allocated := available.UnsortedList()[:needed]
     	availableTopologyAligned := available
     	glog.Infof("allDevice: %v", allDevices)
     	for availID := range available {
