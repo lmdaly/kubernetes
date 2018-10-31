@@ -99,10 +99,9 @@ func (m *manager) calculateTopologyAffinity(pod v1.Pod, container v1.Container) 
 				glog.Infof("[topologymanager] %v is passed into arrange function",topologyHints.SocketAffinity.Mask)   
 				arrangedMask := arrangeMask(topologyHints.SocketAffinity.Mask)						
 				newMask := getTopologyAffinity(arrangedMask, maskHolder)
-				//FIXME - take most suitable value from mask, not just random
 				glog.Infof("[topologymanager] New Mask after getTopologyAffinity (new mask) : %v ",newMask)
 				finalMaskValue = parseMask(newMask)
-				glog.Infof("[topologymanager] Mask Int64 (finalMaskValue): %v", finalMaskValue)
+				glog.Infof("[topologymanager] Mask []Int64 (finalMaskValue): %v", finalMaskValue)
 				maskHolder = newMask
 				glog.Infof("[topologymanager] New MaskHolder: %v", maskHolder) 
      
@@ -164,8 +163,25 @@ func getTopologyAffinity(arrangedMask, maskHolder []string) []string {
 }
 
 func parseMask(mask []string) []int64 {
-	maskStr := mask[0]
-        glog.Infof("Mask string in ParseMask: %v", maskStr)
+	var maskStr string
+	var countSlice []int64
+	for i := 0; i < len(mask); i++ {
+		num := int64(strings.Count(mask[i], "1"))
+		countSlice = append(countSlice, num)		
+        }
+	min := countSlice[0]
+	for i := 0; i < len(countSlice); i++ {
+		if (countSlice[i] < min) && (countSlice[i] >= 1) {
+			min = countSlice[i]
+		}			
+	}
+	for i := 0; i < len(countSlice); i++ {
+		if min == countSlice[i]{
+			maskStr = mask[i]
+			break
+		}	
+	}
+
 	var maskInt []int64
 	for _, char := range maskStr {
 		convertedStr, err := strconv.Atoi(string(char))
