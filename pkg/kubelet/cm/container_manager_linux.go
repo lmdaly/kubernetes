@@ -262,8 +262,8 @@ func NewContainerManager(mountUtil mount.Interface, cadvisorInterface cadvisor.I
 	}
 	
 	// setup topology manager
-    	topologyManager := topologymanager.NewManager()
-	glog.Infof("[topologymanager] Initilizing Topology Manager...")
+    	//topologyManager := topologymanager.NewManager()
+	//glog.Infof("[topologymanager] Initilizing Topology Manager...")
 
 	cm := &containerManagerImpl{
 		cadvisorInterface:   cadvisorInterface,
@@ -275,12 +275,20 @@ func NewContainerManager(mountUtil mount.Interface, cadvisorInterface cadvisor.I
 		cgroupRoot:          cgroupRoot,
 		recorder:            recorder,
 		qosContainerManager: qosContainerManager,
-		topologyManager:     topologyManager,
+		//topologyManager:     topologyManager,
 	}
+    
+    	if utilfeature.DefaultFeatureGate.Enabled(kubefeatures.TopologyManager){
+        	glog.Infof("Node Config: %v", nodeConfig)
+        	cm.topologyManager = topologymanager.NewManager(
+            		nodeConfig.ExperimentalTopologyManagerPolicy,
+        	)	
+        	glog.Infof("[topologymanager] Initilizing Topology Manager with %s policy", nodeConfig.ExperimentalTopologyManagerPolicy)
+    	}
 
 	klog.Infof("Creating device plugin manager: %t", devicePluginEnabled)
 	if devicePluginEnabled {
-		cm.deviceManager, err = devicemanager.NewManagerImpl(topologyManager)
+		cm.deviceManager, err = devicemanager.NewManagerImpl(cm.topologyManager)
 		cm.topologyManager.AddHintProvider(cm.deviceManager)
 	} else {
 		cm.deviceManager, err = devicemanager.NewManagerStub()
@@ -297,7 +305,7 @@ func NewContainerManager(mountUtil mount.Interface, cadvisorInterface cadvisor.I
 			machineInfo,
 			cm.GetNodeAllocatableReservation(),
 			nodeConfig.KubeletRootDir,
-			topologyManager,
+			cm.topologyManager,
 		)
 		if err != nil {
 			klog.Errorf("failed to initialize cpu manager: %v", err)
