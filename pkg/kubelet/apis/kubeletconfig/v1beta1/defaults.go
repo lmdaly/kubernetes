@@ -132,6 +132,9 @@ func SetDefaults_KubeletConfiguration(obj *KubeletConfiguration) {
 		// Keep the same as default NodeStatusUpdateFrequency
 		obj.CPUManagerReconcilePeriod = metav1.Duration{Duration: 10 * time.Second}
 	}
+        if obj.TopologyManagerPolicy == "" {
+		obj.TopologyManagerPolicy = "Preferred"
+	}
 	if obj.RuntimeRequestTimeout == zeroDuration {
 		obj.RuntimeRequestTimeout = metav1.Duration{Duration: 2 * time.Minute}
 	}
