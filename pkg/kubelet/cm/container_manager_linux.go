@@ -286,7 +286,7 @@ func NewContainerManager(mountUtil mount.Interface, cadvisorInterface cadvisor.I
         	glog.Infof("[topologymanager] Initilizing Topology Manager with %s policy", nodeConfig.ExperimentalTopologyManagerPolicy)
     	}
 
-	klog.Infof("Creating device plugin manager: %t", devicePluginEnabled)
+	glog.Infof("Creating device plugin manager: %t", devicePluginEnabled)
 	if devicePluginEnabled {
 		cm.deviceManager, err = devicemanager.NewManagerImpl(cm.topologyManager)
 		cm.topologyManager.AddHintProvider(cm.deviceManager)
