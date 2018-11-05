@@ -39,6 +39,7 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/cm/devicemanager/checkpoint"
 	"k8s.io/kubernetes/pkg/kubelet/config"
 	"k8s.io/kubernetes/pkg/kubelet/cm/topologymanager"
+	"k8s.io/kubernetes/pkg/kubelet/cm/topologymanager/socketmask"
 	"k8s.io/kubernetes/pkg/kubelet/lifecycle"
 	"k8s.io/kubernetes/pkg/kubelet/metrics"
 	watcher "k8s.io/kubernetes/pkg/kubelet/util/pluginwatcher"
@@ -139,9 +140,7 @@ func newManagerImpl(socketPath string, topologyAffinityStore topologymanager.Sto
 }
 
 func (m *ManagerImpl) GetTopologyHints(resource string, amount int) topologymanager.TopologyHints {
-        socketMask := topologymanager.SocketMask{
-                Mask:           nil,      
-        }	
+	socketMask := socketmask.NewSocketMask(nil)	
 	devices := m.Devices()
     	glog.Infof("Devices in GetTopologyHints: %v", devices)
     

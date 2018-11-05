@@ -33,6 +33,7 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/cm/cpuset"
 	kubecontainer "k8s.io/kubernetes/pkg/kubelet/container"
 	"k8s.io/kubernetes/pkg/kubelet/cm/topologymanager"
+	"k8s.io/kubernetes/pkg/kubelet/cm/topologymanager/socketmask"
 	"k8s.io/kubernetes/pkg/kubelet/status"
 )
 
@@ -160,11 +161,7 @@ func (m *manager) GetTopologyHints(resource string, amount int) topologymanager.
 	//For testing purposes - manager should consult available resources and make topology mask based on container request 
 	var amount64 int64
 	amount64 = int64(amount)
-	var nm0 [][]int64
-	socketMask := topologymanager.SocketMask{
-		Mask:   	nm0,
-	}
-    	
+    	socketMask := socketmask.NewSocketMask(nil)	
 	// Check string "cpu" here
 	if resource != "cpu" {
         	glog.Infof("Resource %v not managed by CPU Manager", resource)
