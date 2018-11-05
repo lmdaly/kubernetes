@@ -42,6 +42,8 @@ type manager struct {
  	hintProviders []HintProvider
  	//List of Containers and their Topology Allocations
  	podTopologyHints map[string]containers	
+    	//Topology Manager Policy
+    	policy Policy
 }
  
 //Interface to be implemented by Topology Allocators 
@@ -56,13 +58,30 @@ type Store interface {
  
 type containers map[string]TopologyHints
 var _ Manager = &manager{}
-func NewManager() Manager {
- 	glog.Infof("[topologymanager] Creating topology manager")
+type policyName string
+func NewManager(topologyPolicyName string) Manager {
+ 	glog.Infof("[topologymanager] Creating topology manager with %s policy", topologyPolicyName)
+    	var policy Policy 
+    
+    	switch policyName(topologyPolicyName) {
+    
+    	case PolicyPreferred:
+        	policy = NewPreferredPolicy()
+
+     	case PolicyStrict:
+        	policy = NewStrictPolicy()    
+    
+    	default:
+        	glog.Errorf("[topologymanager] Unknow policy %s, using default policy %s", topologyPolicyName, PolicyPreferred)
+		policy = NewPreferredPolicy()
+    	}    
+    
  	var hp []HintProvider
  	pnh := make (map[string]containers)
  	manager := &manager{
  		hintProviders: hp,
  		podTopologyHints: pnh,
+        	policy: policy,
  	}
  	
 	return manager
@@ -252,14 +271,10 @@ func (m *manager) Admit(attrs *lifecycle.PodAdmitAttributes) lifecycle.PodAdmitR
 	if qosClass == "Guaranteed" {
 		for _, container := range pod.Spec.Containers {
 			result := m.calculateTopologyAffinity(*pod, container)
-			if result.Affinity == true && result.SocketAffinity.Mask == nil {
-				return lifecycle.PodAdmitResult{
-					Admit:   false,
-					Reason:	 "Topology Affinity Error",
-					Message: "Resources cannot be allocated with Topology Locality",
-					
-				}
-			}
+			admitPod := m.policy.CanAdmitPodResult(result)
+            		if admitPod.Admit == false {
+                		return admitPod
+            		}
 			c[container.Name] = result		
 		}
 	
