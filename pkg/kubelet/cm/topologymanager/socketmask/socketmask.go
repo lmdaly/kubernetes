@@ -9,12 +9,10 @@ import (
 )
 
 
-type SocketMask struct {
-	Mask [][]int64
-}
+type SocketMask []int64
 
-func NewSocketMask(Mask [][]int64) SocketMask {
-	sm := SocketMask{Mask}
+func NewSocketMask(Mask []int64) SocketMask {
+	sm := Mask
 	return sm
 }
 

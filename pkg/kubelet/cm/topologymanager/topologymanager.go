@@ -26,7 +26,7 @@ type Manager interface {
  }
 
 type TopologyHints struct {
-	SocketAffinity socketmask.SocketMask
+	SocketAffinity []socketmask.SocketMask
 	Affinity bool
 }
  
@@ -87,7 +87,7 @@ func (m *manager) GetAffinity(podUID string, containerName string) TopologyHints
 func (m *manager) calculateTopologyAffinity(pod v1.Pod, container v1.Container) TopologyHints {
 	sm := socketmask.NewSocketMask(nil)
 	podTopologyHints := TopologyHints {
-		SocketAffinity:	sm,
+		SocketAffinity:	[]socketmask.SocketMask{sm},
 		Affinity: 	true,
 	}
 		
@@ -98,15 +98,21 @@ func (m *manager) calculateTopologyAffinity(pod v1.Pod, container v1.Container) 
 		for resource, amount := range container.Resources.Requests {
 			glog.Infof("Container Resource Name in Topology Manager: %v, Amount: %v", resource, amount.Value())
 			topologyHints := hp.GetTopologyHints(string(resource), int(amount.Value()))
-			if topologyHints.Affinity && topologyHints.SocketAffinity.Mask != nil {
+			var socketAffinityInt64 [][]int64
+			for r := range topologyHints.SocketAffinity {
+				socketAffinityVals := []int64(topologyHints.SocketAffinity[r])
+				socketAffinityInt64 = append(socketAffinityInt64,socketAffinityVals)
+			}
+			if topologyHints.Affinity && topologyHints.SocketAffinity != nil {
 				if count == 0 {
-					maskHolder = sm.BuildMaskHolder(topologyHints.SocketAffinity.Mask)
+					maskHolder = sm.BuildMaskHolder(socketAffinityInt64)
 					count++
 				}
 				glog.Infof("[topologymanager] MaskHolder : %v", maskHolder)
 				//Arrange int array into array of strings 
-				glog.Infof("[topologymanager] %v is passed into arrange function",topologyHints.SocketAffinity.Mask)   
-				arrangedMask := sm.ArrangeMask(topologyHints.SocketAffinity.Mask)						
+				glog.Infof("[topologymanager] %v is passed into arrange function",topologyHints.SocketAffinity)   
+				arrangedMask := sm.ArrangeMask(socketAffinityInt64) 	
+										
 				newMask := sm.GetTopologyAffinity(arrangedMask, maskHolder)
 				glog.Infof("[topologymanager] New Mask after getTopologyAffinity (new mask) : %v ",newMask)
 				finalMaskValue = sm.ParseMask(newMask)
@@ -114,18 +120,18 @@ func (m *manager) calculateTopologyAffinity(pod v1.Pod, container v1.Container) 
 				maskHolder = newMask
 				glog.Infof("[topologymanager] New MaskHolder: %v", maskHolder) 
      
-			} else if topologyHints.Affinity && topologyHints.SocketAffinity.Mask == nil {
+			} else if topologyHints.Affinity && topologyHints.SocketAffinity == nil {
 				glog.Infof("[topologymanager] NO Topology Affinity.")
 				return podTopologyHints
 			
 			}  
 		}
 	}
-	var topologyMaskFull [][]int64
-        topologyMaskFull = append(topologyMaskFull, finalMaskValue)
-        podTopologyHints.SocketAffinity.Mask = topologyMaskFull
-        return podTopologyHints      
-
+	finalSocketMask := socketmask.SocketMask(finalMaskValue)
+	return TopologyHints {
+		SocketAffinity: []socketmask.SocketMask{finalSocketMask},
+		Affinity:	true,
+	}      
 }
 
 func (m *manager) AddHintProvider(h HintProvider) {
