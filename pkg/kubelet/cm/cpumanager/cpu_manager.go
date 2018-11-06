@@ -166,7 +166,7 @@ func (m *manager) GetTopologyHints(resource string, amount int) topologymanager.
 	if resource != "cpu" {
         	glog.Infof("Resource %v not managed by CPU Manager", resource)
         	return topologymanager.TopologyHints{
-			SocketAffinity: socketMask,
+			SocketAffinity: []socketmask.SocketMask{socketMask},
 			Affinity:       false,
        	 	}
     	}
@@ -241,10 +241,14 @@ func (m *manager) GetTopologyHints(resource string, amount int) topologymanager.
         glog.Infof("[cpumanager] Topology Affinities for pod (divided array): %v", divided)
 	glog.Infof("[cpumanager] Number of Assignable CPUs per Socket: %v", CPUsInSocketSize)	
 	glog.Infof("[cpumanager] Topology Affinities for pod (divided array): %v", divided)	
-	 
-	socketMask.Mask = divided	
-	return topologymanager.TopologyHints{
-		SocketAffinity: socketMask, 
+	
+	var cpuSocketMask []socketmask.SocketMask	
+	for r := range divided {
+		cpuSocket := socketmask.SocketMask(divided[r])
+		cpuSocketMask = append(cpuSocketMask, cpuSocket)
+	}					
+	return topologymanager.TopologyHints{ 
+		SocketAffinity: cpuSocketMask,
 		Affinity: true,
         }
 }

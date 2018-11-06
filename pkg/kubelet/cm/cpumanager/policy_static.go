@@ -189,7 +189,7 @@ func (p *staticPolicy) AddContainer(s state.State, pod *v1.Pod, container *v1.Co
         	glog.Infof("[cpumanager] Pod %v, Container %v Topology Affinity is: %v", pod.UID, container.Name, containerTopologyHints)
 
                 sockets := make(map[int]bool)
-                for _, bitMasks := range containerTopologyHints.SocketAffinity.Mask {
+               	for _, bitMasks := range containerTopologyHints.SocketAffinity {
                     for counter, bit := range bitMasks {
                         if bit == int64(1) {
                             sockets[counter] = true

@@ -31,8 +31,8 @@ func (p *strictPolicy) Name() string {
 }
 
 func (p *strictPolicy) CanAdmitPodResult (result TopologyHints) lifecycle.PodAdmitResult {
-        socketMask := result.SocketAffinity.Mask
-        affinity := false
+     	socketMask := result.SocketAffinity
+	affinity := false
         for _, outerMask := range socketMask {      
             for _, innerMask := range outerMask {
                 if innerMask == 0 {

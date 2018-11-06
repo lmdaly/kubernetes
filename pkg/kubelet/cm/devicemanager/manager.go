@@ -148,7 +148,7 @@ func (m *ManagerImpl) GetTopologyHints(resource string, amount int) topologymana
     	if !m.isDevicePluginResource(resource) {
         	glog.Infof("Resource not managed by Device Manager")
         	return topologymanager.TopologyHints{
-			SocketAffinity: socketMask, 
+			SocketAffinity: []socketmask.SocketMask{socketMask}, 
 			Affinity: 	false,
         	}
     	}    
@@ -156,7 +156,7 @@ func (m *ManagerImpl) GetTopologyHints(resource string, amount int) topologymana
     	if _, ok := m.healthyDevices[resource]; !ok {
         	glog.Infof("No healthy devices available for ")
         	return topologymanager.TopologyHints{
-			SocketAffinity:	socketMask,
+			SocketAffinity:	[]socketmask.SocketMask{socketMask},
 			Affinity: 	false,
         	}
     	} 
@@ -169,7 +169,7 @@ func (m *ManagerImpl) GetTopologyHints(resource string, amount int) topologymana
 	if int(available.Len()) < amount {
 		glog.Infof("requested number of devices unavailable for %s. Requested: %d, Available: %d", resource, amount, available.Len())
         	return topologymanager.TopologyHints{
-			SocketAffinity: socketMask,
+			SocketAffinity: []socketmask.SocketMask{socketMask},
 			Affinity: 	false,
         	}
 	}
@@ -256,9 +256,13 @@ func (m *ManagerImpl) GetTopologyHints(resource string, amount int) topologymana
 		fullMask = append(fullMask,overallMask)
 	}
 	glog.Infof("[devicemanager] Topology Affinities for %v %v resource(s) are %v", amount, resource, fullMask)
-	socketMask.Mask = fullMask	
+	var deviceSocketMask []socketmask.SocketMask
+	for r := range fullMask {
+                deviceSocket := socketmask.SocketMask(fullMask[r])
+                deviceSocketMask = append(deviceSocketMask, deviceSocket)
+        }     	
 	return topologymanager.TopologyHints{
-		SocketAffinity:	socketMask,
+		SocketAffinity:	deviceSocketMask,
 		Affinity:	true,
         }
 }
