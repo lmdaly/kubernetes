@@ -16,6 +16,28 @@ func NewSocketMask(Mask []int64) SocketMask {
 	return sm
 }
 
+func (sm SocketMask) GetSocketMask(socketMask []SocketMask, maskHolder []string, count int) (SocketMask, []string) {
+	var socketAffinityInt64 [][]int64
+      	for r := range socketMask {
+       		socketAffinityVals := []int64(socketMask[r])
+          	socketAffinityInt64 = append(socketAffinityInt64,socketAffinityVals)
+    	}
+       	if count == 0 {
+            	maskHolder = sm.BuildMaskHolder(socketAffinityInt64)
+	}
+      	glog.Infof("[socketmask] MaskHolder : %v", maskHolder) 
+        glog.Infof("[socketmask] %v is passed into arrange function", socketMask)   
+        arrangedMask := sm.ArrangeMask(socketAffinityInt64)                   
+        newMask := sm.GetTopologyAffinity(arrangedMask, maskHolder)
+       	glog.Infof("[socketmask] New Mask after getTopologyAffinity (new mask) : %v ",newMask)
+        finalMaskValue := sm.ParseMask(newMask)
+       	glog.Infof("[socketmask] Mask []Int64 (finalMaskValue): %v", finalMaskValue)
+	maskHolder = newMask     
+        glog.Infof("[socketmask] New MaskHolder: %v", maskHolder)
+	finalSocketMask := SocketMask(finalMaskValue)
+	return finalSocketMask, maskHolder
+}
+
 func (sm SocketMask) BuildMaskHolder(mask [][]int64) []string {
         var maskHolder []string
         outerLen := len(mask)
@@ -82,7 +104,7 @@ func (sm SocketMask) ParseMask(mask []string) []int64 {
                 }
                 maskInt = append(maskInt, int64(convertedStr))
         }
-        glog.Infof("Mask Int in Parse Mask: %v", maskInt)
+        glog.Infof("[socketmask] Mask Int in Parse Mask: %v", maskInt)
         return maskInt
 }
 

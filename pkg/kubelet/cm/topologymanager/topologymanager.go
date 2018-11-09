@@ -85,51 +85,27 @@ func (m *manager) GetAffinity(podUID string, containerName string) TopologyHints
 }
 
 func (m *manager) calculateTopologyAffinity(pod v1.Pod, container v1.Container) TopologyHints {
-	sm := socketmask.NewSocketMask(nil)
-	podTopologyHints := TopologyHints {
-		SocketAffinity:	[]socketmask.SocketMask{sm},
-		Affinity: 	true,
-	}
-		
+	socketMask := socketmask.NewSocketMask(nil)
 	var maskHolder []string
 	count := 0 
-	var finalMaskValue []int64
         for _, hp := range m.hintProviders {
 		for resource, amount := range container.Resources.Requests {
 			glog.Infof("Container Resource Name in Topology Manager: %v, Amount: %v", resource, amount.Value())
 			topologyHints := hp.GetTopologyHints(string(resource), int(amount.Value()))
-			var socketAffinityInt64 [][]int64
-			for r := range topologyHints.SocketAffinity {
-				socketAffinityVals := []int64(topologyHints.SocketAffinity[r])
-				socketAffinityInt64 = append(socketAffinityInt64,socketAffinityVals)
-			}
-			if topologyHints.Affinity && topologyHints.SocketAffinity != nil {
-				if count == 0 {
-					maskHolder = sm.BuildMaskHolder(socketAffinityInt64)
-					count++
-				}
-				glog.Infof("[topologymanager] MaskHolder : %v", maskHolder)
-				//Arrange int array into array of strings 
-				glog.Infof("[topologymanager] %v is passed into arrange function",topologyHints.SocketAffinity)   
-				arrangedMask := sm.ArrangeMask(socketAffinityInt64) 	
-										
-				newMask := sm.GetTopologyAffinity(arrangedMask, maskHolder)
-				glog.Infof("[topologymanager] New Mask after getTopologyAffinity (new mask) : %v ",newMask)
-				finalMaskValue = sm.ParseMask(newMask)
-				glog.Infof("[topologymanager] Mask []Int64 (finalMaskValue): %v", finalMaskValue)
-				maskHolder = newMask
-				glog.Infof("[topologymanager] New MaskHolder: %v", maskHolder) 
-     
-			} else if topologyHints.Affinity && topologyHints.SocketAffinity == nil {
+			if topologyHints.Affinity && topologyHints.SocketAffinity  != nil {
+				socketMask, maskHolder = socketMask.GetSocketMask(topologyHints.SocketAffinity, maskHolder, count)
+				count++
+			} else if topologyHints.Affinity && topologyHints.SocketAffinity  == nil {
 				glog.Infof("[topologymanager] NO Topology Affinity.")
-				return podTopologyHints
-			
-			}  
+				return TopologyHints {
+			                SocketAffinity: []socketmask.SocketMask{socketMask},
+                			Affinity:       true,
+        			}
+			}
 		}
 	}
-	finalSocketMask := socketmask.SocketMask(finalMaskValue)
 	return TopologyHints {
-		SocketAffinity: []socketmask.SocketMask{finalSocketMask},
+		SocketAffinity: []socketmask.SocketMask{socketMask},
 		Affinity:	true,
 	}      
 }
