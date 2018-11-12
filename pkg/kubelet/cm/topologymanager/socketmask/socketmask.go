@@ -23,6 +23,7 @@ func (sm SocketMask) GetSocketMask(socketMask []SocketMask, maskHolder []string,
           	socketAffinityInt64 = append(socketAffinityInt64,socketAffinityVals)
     	}
        	if count == 0 {
+<<<<<<< HEAD
             	maskHolder = sm.BuildMaskHolder(socketAffinityInt64)
 	}
       	glog.Infof("[socketmask] MaskHolder : %v", maskHolder) 
@@ -31,6 +32,16 @@ func (sm SocketMask) GetSocketMask(socketMask []SocketMask, maskHolder []string,
         newMask := sm.GetTopologyAffinity(arrangedMask, maskHolder)
        	glog.Infof("[socketmask] New Mask after getTopologyAffinity (new mask) : %v ",newMask)
         finalMaskValue := sm.ParseMask(newMask)
+=======
+            	maskHolder = buildMaskHolder(socketAffinityInt64)
+	}
+      	glog.Infof("[socketmask] MaskHolder : %v", maskHolder) 
+        glog.Infof("[socketmask] %v is passed into arrange function", socketMask)   
+        arrangedMask := arrangeMask(socketAffinityInt64)                   
+        newMask := getTopologyAffinity(arrangedMask, maskHolder)
+       	glog.Infof("[socketmask] New Mask after getTopologyAffinity (new mask) : %v ",newMask)
+        finalMaskValue := parseMask(newMask)
+>>>>>>> Updated TopologyHints struct and SocketMask type (#12)
        	glog.Infof("[socketmask] Mask []Int64 (finalMaskValue): %v", finalMaskValue)
 	maskHolder = newMask     
         glog.Infof("[socketmask] New MaskHolder: %v", maskHolder)
@@ -38,7 +49,11 @@ func (sm SocketMask) GetSocketMask(socketMask []SocketMask, maskHolder []string,
 	return finalSocketMask, maskHolder
 }
 
+<<<<<<< HEAD
 func (sm SocketMask) BuildMaskHolder(mask [][]int64) []string {
+=======
+func buildMaskHolder(mask [][]int64) []string {
+>>>>>>> Updated TopologyHints struct and SocketMask type (#12)
         var maskHolder []string
         outerLen := len(mask)
         var innerLen int = 0 
@@ -59,11 +74,19 @@ func (sm SocketMask) BuildMaskHolder(mask [][]int64) []string {
         return maskHolder
 }
 
+<<<<<<< HEAD
 func (sm SocketMask) GetTopologyAffinity(arrangedMask, maskHolder []string) []string {
         var topologyTemp []string
         for i:= 0; i < (len(maskHolder)); i++ {
                 for j:= 0; j < (len(arrangedMask)); j++ {
                         tempStr := sm.AndOperation(maskHolder[i],arrangedMask[j])
+=======
+func getTopologyAffinity(arrangedMask, maskHolder []string) []string {
+        var topologyTemp []string
+        for i:= 0; i < (len(maskHolder)); i++ {
+                for j:= 0; j < (len(arrangedMask)); j++ {
+                        tempStr := andOperation(maskHolder[i],arrangedMask[j])
+>>>>>>> Updated TopologyHints struct and SocketMask type (#12)
                         if strings.Contains(tempStr, "1") {
                                 topologyTemp = append(topologyTemp, tempStr )
                         }
@@ -82,7 +105,11 @@ func (sm SocketMask) GetTopologyAffinity(arrangedMask, maskHolder []string) []st
         return topologyResult
 }
 
+<<<<<<< HEAD
 func (sm SocketMask) ParseMask(mask []string) []int64 {
+=======
+func parseMask(mask []string) []int64 {
+>>>>>>> Updated TopologyHints struct and SocketMask type (#12)
         var maskStr string
         min := strings.Count(mask[0], "1")
         var num, index int
@@ -108,7 +135,11 @@ func (sm SocketMask) ParseMask(mask []string) []int64 {
         return maskInt
 }
 
+<<<<<<< HEAD
 func (sm SocketMask) ArrangeMask(mask [][]int64) []string {
+=======
+func arrangeMask(mask [][]int64) []string {
+>>>>>>> Updated TopologyHints struct and SocketMask type (#12)
         var socketStr []string
         var bufferNew bytes.Buffer
         outerLen := len(mask)
@@ -127,7 +158,11 @@ func (sm SocketMask) ArrangeMask(mask [][]int64) []string {
         return socketStr
 }
 
+<<<<<<< HEAD
 func (sm SocketMask) AndOperation(val1, val2 string) (string) {
+=======
+func andOperation(val1, val2 string) (string) {
+>>>>>>> Updated TopologyHints struct and SocketMask type (#12)
         l1, l2 := len(val1), len(val2)
         //compare lengths of strings - pad shortest with trailing zeros
         if l1 != l2 {
