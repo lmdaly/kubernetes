@@ -21,8 +21,8 @@ import (
 type Manager interface {
  	lifecycle.PodAdmitHandler
  	AddHintProvider(HintProvider)
-	AddPod(pod *v1.Pod, container *v1.Container, containerID string) error 
- 	RemovePod(podName string) error 
+	AddPod(pod *v1.Pod, containerID string) error 
+ 	RemovePod(containerID string) error 
  	Store
  }
 
@@ -118,7 +118,7 @@ func (m *manager) AddHintProvider(h HintProvider) {
  	m.hintProviders = append(m.hintProviders, h)
 }
 
-func (m *manager) AddPod(pod *v1.Pod, container *v1.Container, containerID string) error {
+func (m *manager) AddPod(pod *v1.Pod, containerID string) error {
 	m.podMap[containerID] = string(pod.UID)
 	return nil
 }
@@ -126,7 +126,7 @@ func (m *manager) AddPod(pod *v1.Pod, container *v1.Container, containerID strin
 func (m *manager) RemovePod (containerID string) error {
  	podUIDString := m.podMap[containerID]
 	delete(m.podTopologyHints, podUIDString)
-	glog.Infof("RemovePod - podTopologyHints: %v", m.podTopologyHints)
+	glog.Infof("[topologymanager] RemovePod - Container ID: %v podTopologyHints: %v", containerID, m.podTopologyHints)
 	return nil 
 }
 
