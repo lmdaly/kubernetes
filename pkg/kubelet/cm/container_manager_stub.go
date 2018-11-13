@@ -94,7 +94,7 @@ func (cm *containerManagerStub) UpdatePluginResources(*schedulercache.NodeInfo, 
 }
 
 func (cm *containerManagerStub) InternalContainerLifecycle() InternalContainerLifecycle {
-	return &internalContainerLifecycleImpl{cpumanager.NewFakeManager()}
+	return &internalContainerLifecycleImpl{cpumanager.NewFakeManager(), nil}
 }
 
 func (cm *containerManagerStub) GetPodCgroupRoot() string {
