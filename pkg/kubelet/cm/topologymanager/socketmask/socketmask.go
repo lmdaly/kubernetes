@@ -23,14 +23,14 @@ func (sm SocketMask) GetSocketMask(socketMask []SocketMask, maskHolder []string,
           	socketAffinityInt64 = append(socketAffinityInt64,socketAffinityVals)
     	}
        	if count == 0 {
-            	maskHolder = sm.BuildMaskHolder(socketAffinityInt64)
+            	maskHolder = buildMaskHolder(socketAffinityInt64)
 	}
       	glog.Infof("[socketmask] MaskHolder : %v", maskHolder) 
         glog.Infof("[socketmask] %v is passed into arrange function", socketMask)   
-        arrangedMask := sm.ArrangeMask(socketAffinityInt64)                   
-        newMask := sm.GetTopologyAffinity(arrangedMask, maskHolder)
+        arrangedMask := arrangeMask(socketAffinityInt64)                   
+        newMask := getTopologyAffinity(arrangedMask, maskHolder)
        	glog.Infof("[socketmask] New Mask after getTopologyAffinity (new mask) : %v ",newMask)
-        finalMaskValue := sm.ParseMask(newMask)
+        finalMaskValue := parseMask(newMask)
        	glog.Infof("[socketmask] Mask []Int64 (finalMaskValue): %v", finalMaskValue)
 	maskHolder = newMask     
         glog.Infof("[socketmask] New MaskHolder: %v", maskHolder)
@@ -38,7 +38,7 @@ func (sm SocketMask) GetSocketMask(socketMask []SocketMask, maskHolder []string,
 	return finalSocketMask, maskHolder
 }
 
-func (sm SocketMask) BuildMaskHolder(mask [][]int64) []string {
+func buildMaskHolder(mask [][]int64) []string {
         var maskHolder []string
         outerLen := len(mask)
         var innerLen int = 0 
@@ -59,11 +59,11 @@ func (sm SocketMask) BuildMaskHolder(mask [][]int64) []string {
         return maskHolder
 }
 
-func (sm SocketMask) GetTopologyAffinity(arrangedMask, maskHolder []string) []string {
+func getTopologyAffinity(arrangedMask, maskHolder []string) []string {
         var topologyTemp []string
         for i:= 0; i < (len(maskHolder)); i++ {
                 for j:= 0; j < (len(arrangedMask)); j++ {
-                        tempStr := sm.AndOperation(maskHolder[i],arrangedMask[j])
+                        tempStr := andOperation(maskHolder[i],arrangedMask[j])
                         if strings.Contains(tempStr, "1") {
                                 topologyTemp = append(topologyTemp, tempStr )
                         }
@@ -82,7 +82,7 @@ func (sm SocketMask) GetTopologyAffinity(arrangedMask, maskHolder []string) []st
         return topologyResult
 }
 
-func (sm SocketMask) ParseMask(mask []string) []int64 {
+func parseMask(mask []string) []int64 {
         var maskStr string
         min := strings.Count(mask[0], "1")
         var num, index int
@@ -108,7 +108,7 @@ func (sm SocketMask) ParseMask(mask []string) []int64 {
         return maskInt
 }
 
-func (sm SocketMask) ArrangeMask(mask [][]int64) []string {
+func arrangeMask(mask [][]int64) []string {
         var socketStr []string
         var bufferNew bytes.Buffer
         outerLen := len(mask)
@@ -127,7 +127,7 @@ func (sm SocketMask) ArrangeMask(mask [][]int64) []string {
         return socketStr
 }
 
-func (sm SocketMask) AndOperation(val1, val2 string) (string) {
+func andOperation(val1, val2 string) (string) {
         l1, l2 := len(val1), len(val2)
         //compare lengths of strings - pad shortest with trailing zeros
         if l1 != l2 {
