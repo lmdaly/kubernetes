@@ -21,7 +21,8 @@ import (
 type Manager interface {
  	lifecycle.PodAdmitHandler
  	AddHintProvider(HintProvider)
- 	RemovePod(podName string)
+	AddPod(pod *v1.Pod, container *v1.Container, containerID string) error 
+ 	RemovePod(podName string) error 
  	Store
  }
 
@@ -34,7 +35,8 @@ type manager struct {
  	//The list of components registered with the Manager
  	hintProviders []HintProvider
  	//List of Containers and their Topology Allocations
- 	podTopologyHints map[string]containers	
+ 	podTopologyHints map[string]containers
+	podMap map[string]string	
     	//Topology Manager Policy
     	policy Policy
 }
@@ -71,9 +73,11 @@ func NewManager(topologyPolicyName string) Manager {
     
  	var hp []HintProvider
  	pnh := make (map[string]containers)
+	pm := make (map[string]string)
  	manager := &manager{
  		hintProviders: hp,
  		podTopologyHints: pnh,
+		podMap: pm,
         	policy: policy,
  	}
  	
@@ -114,15 +118,22 @@ func (m *manager) AddHintProvider(h HintProvider) {
  	m.hintProviders = append(m.hintProviders, h)
 }
 
-func (m *manager) RemovePod (podName string) {
- 	glog.Infof("Remove pod func")
+func (m *manager) AddPod(pod *v1.Pod, container *v1.Container, containerID string) error {
+	m.podMap[containerID] = string(pod.UID)
+	return nil
+}
+
+func (m *manager) RemovePod (containerID string) error {
+ 	podUIDString := m.podMap[containerID]
+	delete(m.podTopologyHints, podUIDString)
+	glog.Infof("RemovePod - podTopologyHints: %v", m.podTopologyHints)
+	return nil 
 }
 
 func (m *manager) Admit(attrs *lifecycle.PodAdmitAttributes) lifecycle.PodAdmitResult {
  	glog.Infof("[topologymanager] Topology Admit Handler")
  	pod := attrs.Pod
  	c := make (containers)
- 	
 	glog.Infof("[topologymanager] Pod QoS Level: %v", pod.Status.QOSClass)
 	
 	qosClass := pod.Status.QOSClass
@@ -134,9 +145,8 @@ func (m *manager) Admit(attrs *lifecycle.PodAdmitAttributes) lifecycle.PodAdmitR
             		if admitPod.Admit == false {
                 		return admitPod
             		}
-			c[container.Name] = result		
+			c[container.Name] = result
 		}
-	
 		m.podTopologyHints[string(pod.UID)] = c
 		glog.Infof("[topologymanager] Topology Affinity for Pod: %v are %v", pod.UID, m.podTopologyHints[string(pod.UID)])
 	

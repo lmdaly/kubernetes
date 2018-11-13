@@ -337,7 +337,7 @@ func (cm *containerManagerImpl) NewPodContainerManager() PodContainerManager {
 }
 
 func (cm *containerManagerImpl) InternalContainerLifecycle() InternalContainerLifecycle {
-	return &internalContainerLifecycleImpl{cm.cpuManager}
+	return &internalContainerLifecycleImpl{cm.cpuManager, cm.topologyManager}
 }
 
 // Create a cgroup container manager.
