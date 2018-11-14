@@ -51,7 +51,7 @@ func (m *fakeManager) RemoveContainer(containerID string) error {
 	return nil
 }
 
-func (m *fakeManager) GetTopologyHints(resource string, amount int) topologymanager.TopologyHints {
+func (m *fakeManager) GetTopologyHints(pod v1.Pod, container v1.Container) topologymanager.TopologyHints {
        glog.Infof("[fake cpumanager] Get Topology Hints")
        return topologymanager.TopologyHints{}
 }
