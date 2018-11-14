@@ -126,6 +126,7 @@ func (m *manager) AddPod(pod *v1.Pod, containerID string) error {
 func (m *manager) RemovePod (containerID string) error {
  	podUIDString := m.podMap[containerID]
 	delete(m.podTopologyHints, podUIDString)
+	delete(m.podMap, containerID)
 	glog.Infof("[topologymanager] RemovePod - Container ID: %v podTopologyHints: %v", containerID, m.podTopologyHints)
 	return nil 
 }
