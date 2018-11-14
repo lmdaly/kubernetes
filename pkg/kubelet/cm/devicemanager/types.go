@@ -55,9 +55,9 @@ type Manager interface {
 	// and inactive device plugin resources previously registered on the node.
 	GetCapacity() (v1.ResourceList, v1.ResourceList, []string)
 	
-	 // TopologyManager HintProvider provider indicates the Device Manager implements the Topology Manager Interface
-     // and is consulted to make Topology aware resource alignments
-     GetTopologyHints(resource string, amount int) topologymanager.TopologyHints
+	// TopologyManager HintProvider provider indicates the Device Manager implements the Topology Manager Interface
+     	// and is consulted to make Topology aware resource alignments
+     	GetTopologyHints(pod v1.Pod, container v1.Container) topologymanager.TopologyHints
 }
 
 // DeviceRunContainerOptions contains the combined container runtime settings to consume its allocated devices.

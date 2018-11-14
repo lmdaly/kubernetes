@@ -13,7 +13,7 @@
 package topologymanager
 
 import (
-    "k8s.io/kubernetes/pkg/kubelet/lifecycle"
+	"k8s.io/kubernetes/pkg/kubelet/lifecycle"
 )
 
 type strictPolicy struct {}
@@ -23,33 +23,24 @@ var _ Policy = &strictPolicy{}
 const PolicyStrict policyName = "strict"
 
 func NewStrictPolicy() Policy {
-    return &strictPolicy{}
+    	return &strictPolicy{}
 }
 
 func (p *strictPolicy) Name() string {
-    return string(PolicyStrict)
+	return string(PolicyStrict)
 }
 
 func (p *strictPolicy) CanAdmitPodResult (result TopologyHints) lifecycle.PodAdmitResult {
-     	socketMask := result.SocketAffinity
-	affinity := false
-        for _, outerMask := range socketMask {      
-            for _, innerMask := range outerMask {
-                if innerMask == 0 {
-                    affinity = true
-                    break
-                }
-            }
-        }
-        if !affinity {
-            return lifecycle.PodAdmitResult{
-                        Admit:  false,
-                        Reason:	 "Topology Affinity Error",
-                        Message: "Resources cannot be allocated with Topology Locality",
-            }
-        }  else {
-            return lifecycle.PodAdmitResult{
-                Admit:   true,          
-            }
+    	affinity := result.Affinity
+    	if !affinity {
+    		return lifecycle.PodAdmitResult{
+        		Admit:  false,
+        		Reason:	 "Topology Affinity Error",
+        		Message: "Resources cannot be allocated with Topology Locality",
+        	}
+    	}  else {
+        	return lifecycle.PodAdmitResult{
+                	Admit:   true,          
+            	}
         }     
 }

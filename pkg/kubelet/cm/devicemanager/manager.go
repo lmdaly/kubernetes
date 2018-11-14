@@ -22,6 +22,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+    	"reflect"
 	"sync"
 	"time"
 
@@ -139,134 +140,109 @@ func newManagerImpl(socketPath string, topologyAffinityStore topologymanager.Sto
 	return manager, nil
 }
 
-func (m *ManagerImpl) GetTopologyHints(resource string, amount int) topologymanager.TopologyHints {
+func (m *ManagerImpl) GetTopologyHints(pod v1.Pod, container v1.Container) topologymanager.TopologyHints {
 	socketMask := socketmask.NewSocketMask(nil)	
 	devices := m.Devices()
     	glog.Infof("Devices in GetTopologyHints: %v", devices)
-    
-    	glog.Infof("Container Resource Name in Device Manager: %v, Amount: %v", resource, amount)
-    	if !m.isDevicePluginResource(resource) {
-        	glog.Infof("Resource not managed by Device Manager")
-        	return topologymanager.TopologyHints{
-			SocketAffinity: []socketmask.SocketMask{socketMask}, 
-			Affinity: 	false,
-        	}
-    	}    
-    	glog.Infof("Resource managed by Device Manager")
-    	if _, ok := m.healthyDevices[resource]; !ok {
-        	glog.Infof("No healthy devices available for ")
-        	return topologymanager.TopologyHints{
-			SocketAffinity:	[]socketmask.SocketMask{socketMask},
-			Affinity: 	false,
-        	}
-    	} 
-
-    	// Gets Devices in use.
-	devicesInUse := m.allocatedDevices[resource]
-    	glog.Infof("Devices in use:%v", devicesInUse)
-	// Gets a list of available devices.
-	available := m.healthyDevices[resource].Difference(devicesInUse)
-	if int(available.Len()) < amount {
-		glog.Infof("requested number of devices unavailable for %s. Requested: %d, Available: %d", resource, amount, available.Len())
-        	return topologymanager.TopologyHints{
-			SocketAffinity: []socketmask.SocketMask{socketMask},
-			Affinity: 	false,
-        	}
-	}
-    	glog.Infof("[device-manager] Available devices for resource: %v", available)	
-	duplicate_frequency := make(map[int64]int64)
-	var socketValues []int64	
- 	for availID := range available {
-		for _, device := range devices[resource] {
-			glog.Infof("[device-manager] AvailID: %v DeviceID: %v", availID, device)
-			if availID == device.ID {
-				socket := int64(device.Socket)
-				socketValues = append(socketValues, socket)	//slice of sockets with resource
-				if duplicate_frequency[socket] >= 1 {
-                    			duplicate_frequency[socket] += 1
-                		} else {
-                    			duplicate_frequency[socket] = 1
-                		}			
-			}						
-		}
-	}	
-	glog.Infof("[device-manager] Sockets with device: %v", socketValues)
-	var count, devicesTotal int64 = 0, 0 	
-	var amount64 int64
-	amount64 = int64(amount)	
-	var availableSockets []int64
-	var notEmptySkts []int64
-	// Loop through device counts (duplicates of each socket) 
-	for socket, devicesPerSkt := range duplicate_frequency{
- 		glog.Infof("[device-manager] Socket : %d , number of devices : %d", socket, devicesPerSkt)
-		devicesTotal = devicesTotal + devicesPerSkt
-		if devicesPerSkt !=0 {
-			notEmptySkts = append(notEmptySkts, socket)
-		}
-		if devicesPerSkt >= amount64 {
-			availableSockets = append(availableSockets, socket)
-			count++
-		}		
- 	}
-	glog.Infof("[device-manager] Device Count Total: %v", devicesTotal)	
-
-	if count == 0 {
-		glog.Infof("[device-manager] No Socket has available resources - Preferred only")
-	}    
-	glog.Infof("[device-manager] Sockets with 1 or more available devices: %v", notEmptySkts)
-	glog.Infof("[device-manager] Sockets with enough available devices: %v", availableSockets)
-	
-	// Find the largest socket that is NOT empty
-        var largestSkt int64 = 0
-        for i := 0; i < len(notEmptySkts); i++ {
-                if largestSkt < notEmptySkts[i] {
-                        largestSkt = notEmptySkts[i]
+        var deviceMask []socketmask.SocketMask
+        count := false
+        for resourceObj, amountObj := range container.Resources.Requests {
+            resource := string(resourceObj)
+            amount := int64(amountObj.Value())
+            if m.isDevicePluginResource(resource){
+                glog.Infof("%v is a resource managed by device manager.", resource)
+                if _, ok := m.healthyDevices[resource]; !ok {
+                    glog.Infof("No healthy devices for resource %v", resource)
+                    continue
                 }
+                // Gets Devices in use.
+                devicesInUse := m.allocatedDevices[resource]
+                glog.Infof("Devices in use:%v", devicesInUse)
+                // Gets a list of available devices.
+                available := m.healthyDevices[resource].Difference(devicesInUse)
+                if int64(available.Len()) < amount {
+                glog.Infof("requested number of devices unavailable for %s. Requested: %d, Available: %d", resource, amount, available.Len())
+                    return topologymanager.TopologyHints{
+                    SocketAffinity: []socketmask.SocketMask{socketMask},
+                    Affinity: 	false,
+                    }
+                }
+                glog.Infof("[devicemanager] Available devices for resource %v: %v", resource, available)
+                device_socket_avail := make(map[int64]int64)
+                largestSkt := int64(0)
+               
+                for availID := range available {
+                    for _, device := range devices[resource] {
+                        glog.Infof("[device-manager] AvailID: %v DeviceID: %v", availID, device)
+                        if availID == device.ID {
+                            socket := device.Socket
+                       		device_socket_avail[socket] += 1
+                            if socket > largestSkt {
+                                largestSkt = socket
+                            }
+                        }                            
+                    }
+                }
+                
+                glog.Infof("Largest Socket is: %v", largestSkt)
+                var mask socketmask.SocketMask
+                var crossSocket socketmask.SocketMask
+                crossSocket = make([]int64, (largestSkt+1))
+                var overwriteDeviceMask []socketmask.SocketMask
+                for socket, amountAvail := range device_socket_avail {
+                    glog.Infof("Socket: %v, Avail: %v", socket, amountAvail)
+                    mask = nil
+                    if amountAvail >= amount {
+                        for i := int64(0); i < largestSkt+1; i++ {
+                            if i == socket {
+                                mask = append(mask, 1)
+                            } else {
+                                mask = append(mask, 0)
+                            }
+                        }
+                        glog.Infof("Mask: %v", mask)
+                        if !count {
+                            deviceMask = append(deviceMask, mask)
+                        } else {
+                            for _, storedMask := range deviceMask {    
+                                if reflect.DeepEqual(storedMask, mask) {
+                                    overwriteDeviceMask = append(overwriteDeviceMask, storedMask)
+                                }
+                            }
+                        }                           
+                    } 
+                    //crossSocket can be duplicate of mask need to remove if so
+                    crossSocket[socket] = 1                 
+                }
+                if !count {
+                    deviceMask = append(deviceMask, crossSocket)
+                } else {
+                    for _, storedMask := range deviceMask {
+                        if reflect.DeepEqual(storedMask, crossSocket) {
+                            overwriteDeviceMask = append(overwriteDeviceMask, crossSocket)
+                        }
+                    }
+                    deviceMask = overwriteDeviceMask
+                }
+                glog.Infof("deviceMask: %v", deviceMask)
+                count = true
+            }            
         }
-        glog.Infof("[device-manager] Largest socket that is NOT empty: %v", largestSkt)
-	
-	var mask []int64
-	fullMask:= make([][]int64,len(availableSockets))
-	var i int64
-	// Use largest socket to construct 2D slice (mask) for return to Topology Manager
-	for j, socket := range availableSockets {
-		mask = nil	
-		for i = 0; i <= largestSkt; i++ {
-            		if i == socket {
-                		mask = append(mask, 1)
-            		} else {
-                		mask = append(mask, 0)
-            		}
-        	}
-		fullMask[j] = mask 
-	}	
-	
-	//Build final slice for full mask - overall affinity for preferred state (only if more than 1 available socket
-	// or if no socket available but enough devices are spread across sockets))
-	overallMask := make([]int64, largestSkt+1)
-	if (len(fullMask) > 1) || ((len(fullMask) == 0) && (devicesTotal >= amount64)) {
-		var k int64
-		for k = 0; k < largestSkt+1; k ++ {
-			for _, notEmptySkt := range notEmptySkts {
-				if k == notEmptySkt {
-					overallMask[k] = 1
-				} 	
+	affinity := false
+	for _, outerMask := range deviceMask {
+		for _, innerMask := range outerMask {
+			if innerMask == 0 {
+				affinity = true
+				break
 			}
 		}
-		fullMask = append(fullMask,overallMask)
 	}
-	glog.Infof("[devicemanager] Topology Affinities for %v %v resource(s) are %v", amount, resource, fullMask)
-	var deviceSocketMask []socketmask.SocketMask
-	for r := range fullMask {
-                deviceSocket := socketmask.SocketMask(fullMask[r])
-                deviceSocketMask = append(deviceSocketMask, deviceSocket)
-        }     	
-	return topologymanager.TopologyHints{
-		SocketAffinity:	deviceSocketMask,
-		Affinity:	true,
+        return topologymanager.TopologyHints{
+            SocketAffinity:	deviceMask,
+            Affinity:	affinity,
         }
 }
-
+    	
 func (m *ManagerImpl) genericDeviceUpdateCallback(resourceName string, added, updated, deleted []pluginapi.Device) {
 	kept := append(updated, added...)
 	m.mutex.Lock()

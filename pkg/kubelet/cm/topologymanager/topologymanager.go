@@ -93,19 +93,21 @@ func (m *manager) calculateTopologyAffinity(pod v1.Pod, container v1.Container) 
 	var maskHolder []string
 	count := 0 
         for _, hp := range m.hintProviders {
-		for resource, amount := range container.Resources.Requests {
-			glog.Infof("Container Resource Name in Topology Manager: %v, Amount: %v", resource, amount.Value())
-			topologyHints := hp.GetTopologyHints(string(resource), int(amount.Value()))
-			if topologyHints.Affinity && topologyHints.SocketAffinity  != nil {
-				socketMask, maskHolder = socketMask.GetSocketMask(topologyHints.SocketAffinity, maskHolder, count)
-				count++
-			} else if topologyHints.Affinity && topologyHints.SocketAffinity  == nil {
-				glog.Infof("[topologymanager] NO Topology Affinity.")
-				return TopologyHints {
-			                SocketAffinity: []socketmask.SocketMask{socketMask},
-                			Affinity:       true,
-        			}
-			}
+		topologyHints := hp.GetTopologyHints(pod, container)
+		if topologyHints.Affinity && topologyHints.SocketAffinity  != nil {
+			socketMask, maskHolder = socketMask.GetSocketMask(topologyHints.SocketAffinity, maskHolder, count)
+			count++
+		} else if topologyHints.Affinity && topologyHints.SocketAffinity  == nil {
+			glog.Infof("[topologymanager] NO Topology Affinity.")
+			return TopologyHints {
+                   		SocketAffinity: []socketmask.SocketMask{socketMask},
+                    		Affinity:       false,
+                	}
+		} else if  !topologyHints.Affinity && topologyHints.SocketAffinity  != nil {
+			glog.Infof("[topologymanager] Cross Socket Topology Affinity")
+			affinity = false
+			socketMask, maskHolder = socketMask.GetSocketMask(topologyHints.SocketAffinity, maskHolder, count)
+			count++
 		}
 	}
 	return TopologyHints {

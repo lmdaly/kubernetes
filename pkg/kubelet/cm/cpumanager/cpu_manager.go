@@ -69,7 +69,7 @@ type Manager interface {
         
        // Manager HintProvider provider indicates the Device Manager implements the Topology Manager Interface
        // and is consulted to make Topology aware resource alignments
-       GetTopologyHints(resource string, amount int) topologymanager.TopologyHints
+       GetTopologyHints(pod v1.Pod, container v1.Container) topologymanager.TopologyHints
 }
 
 type manager struct {
@@ -157,100 +157,101 @@ func NewManager(cpuPolicyName string, reconcilePeriod time.Duration, machineInfo
 	return manager, nil
 }
 
-func (m *manager) GetTopologyHints(resource string, amount int) topologymanager.TopologyHints {
+func (m *manager) GetTopologyHints(pod v1.Pod, container v1.Container) topologymanager.TopologyHints {
 	//For testing purposes - manager should consult available resources and make topology mask based on container request 
-	var amount64 int64
-	amount64 = int64(amount)
-    	socketMask := socketmask.NewSocketMask(nil)	
-	// Check string "cpu" here
-	if resource != "cpu" {
-        	glog.Infof("Resource %v not managed by CPU Manager", resource)
-        	return topologymanager.TopologyHints{
-			SocketAffinity: []socketmask.SocketMask{socketMask},
-			Affinity:       false,
-       	 	}
-    	}
-	
-	glog.Infof("[cpumanager] Guaranteed CPUs detected: %v", amount)
+    	var cpuSocketMask []socketmask.SocketMask	
+    	for resourceObj, amountObj := range container.Resources.Requests {
+        	resource := string(resourceObj)
+        	amount := int(amountObj.Value())
+        	amount64 := int64(amount)
+        	// Check string "cpu" here
+        	if resource != "cpu" {
+                	continue
+            	}
+        
+        	glog.Infof("[cpumanager] Guaranteed CPUs detected: %v", amount)
 
-	// Discover machine topology
-        topo, err := topology.Discover(m.machineInfo)
-        if err != nil {
-                glog.Infof("[cpu manager] error discovering topology")
-        }
-	
-	// Get no. of shared CPUs
-	allCPUs := topo.CPUDetails.CPUs()
-	glog.Infof("[cpumanager] Shared CPUs: %v", allCPUs)        
-	
-	// Get Reserved CPUs
-	reservedCPUs := m.nodeAllocatableReservation[v1.ResourceCPU]	
-	reservedCPUsFloat := float64(reservedCPUs.MilliValue()) / 1000
-	numReservedCPUs := int(math.Ceil(reservedCPUsFloat))        	
-	reserved, _ := takeByTopology(topo, allCPUs, numReservedCPUs)
-	glog.Infof("[cpumanager] Reserved CPUs: %v", reserved)
-			
-	//Get Assignable CPUs (Shared - Reserved)
-	assignableCPUs := m.state.GetDefaultCPUSet().Difference(reserved)
-	glog.Infof("[cpumanager] Assignable CPUs (Shared - Reserved): %v", assignableCPUs)
-		
-	// New CPUAccumulator
-	cpuAccum := newCPUAccumulator(topo, assignableCPUs, amount)     
+        	// Discover machine topology
+            	topo, err := topology.Discover(m.machineInfo)
+            	if err != nil {
+                    glog.Infof("[cpu manager] error discovering topology")
+            	}
+        
+        	// Get no. of shared CPUs
+        	allCPUs := topo.CPUDetails.CPUs()
+        	glog.Infof("[cpumanager] Shared CPUs: %v", allCPUs)        
+        
+        	// Get Reserved CPUs
+        	reservedCPUs := m.nodeAllocatableReservation[v1.ResourceCPU]	
+        	reservedCPUsFloat := float64(reservedCPUs.MilliValue()) / 1000
+        	numReservedCPUs := int(math.Ceil(reservedCPUsFloat))        	
+        	reserved, _ := takeByTopology(topo, allCPUs, numReservedCPUs)
+        	glog.Infof("[cpumanager] Reserved CPUs: %v", reserved)
+                
+        	//Get Assignable CPUs (Shared - Reserved)
+        	assignableCPUs := m.state.GetDefaultCPUSet().Difference(reserved)
+        	glog.Infof("[cpumanager] Assignable CPUs (Shared - Reserved): %v", assignableCPUs)
 
-        // Get total number of sockets on machine 
-       	socketCount := topo.NumSockets
-        glog.Infof("[cpumanager] Number of sockets on machine (available and unavailable): %v", socketCount)
+        	// New CPUAccumulator
+        	cpuAccum := newCPUAccumulator(topo, assignableCPUs, amount)     
 
-	// Check for empty CPUs
-	freeCPUs := cpuAccum.freeCPUs()
-	glog.Infof("[cpumanager] Assignable CPUs (all Sockets): %v", freeCPUs)	
+            	// Get total number of sockets on machine 
+            	socketCount := topo.NumSockets
+            	glog.Infof("[cpumanager] Number of sockets on machine (available and unavailable): %v", socketCount)
 
-	// Get Number of free CPUs per Socket
-	CPUsInSocketSize := make([]int64, socketCount)
-	var arr []int64
-	var sum int64 = 0
-	var divided [][]int64
-	for i := 0; i < socketCount; i++ {
-		CPUsInSocket := cpuAccum.details.CPUsInSocket(i)
-		glog.Infof("[cpumanager] Assignable CPUs on Socket %v: %v", i, CPUsInSocket)
-		CPUsInSocketSize[i] = int64(CPUsInSocket.Size())
-		sum += CPUsInSocketSize[i]
-		if CPUsInSocketSize[i] >= amount64 {
-			for j := 0; j < socketCount; j++ {
-                		if j == i {
-                    			arr = append(arr, 1)
-                		} else {
-                    			arr = append(arr, 0)
-                		}
-            		}
-            		divided = append(divided, arr)
-            		arr = nil
-		}						
-	}
-	if sum >= amount64 {
-                for i := 0; i < socketCount; i++ {
-                        if CPUsInSocketSize[i] == 0 {
-                                arr = append(arr, 0)
-                        } else {
-                                arr = append(arr, 1)
-                        }
+        	// Check for empty CPUs
+        	freeCPUs := cpuAccum.freeCPUs()
+        	glog.Infof("[cpumanager] Assignable CPUs (all Sockets): %v", freeCPUs)	
+
+        	// Get Number of free CPUs per Socket
+        	CPUsInSocketSize := make([]int64, socketCount)
+        	var arr []int64
+        	var sum int64 = 0
+        	var divided [][]int64
+        	for i := 0; i < socketCount; i++ {
+            		CPUsInSocket := cpuAccum.details.CPUsInSocket(i)
+            		glog.Infof("[cpumanager] Assignable CPUs on Socket %v: %v", i, CPUsInSocket)
+            		CPUsInSocketSize[i] = int64(CPUsInSocket.Size())
+            		sum += CPUsInSocketSize[i]
+            		if CPUsInSocketSize[i] >= amount64 {
+                		for j := 0; j < socketCount; j++ {
+                            		if j == i {
+                                    		arr = append(arr, 1)
+                            		} else {
+                                    		arr = append(arr, 0)
+                            		}
+                        	}
+                        	divided = append(divided, arr)
+                        	arr = nil
+            		}						
+        	}
+        	if sum >= amount64 {
+                    	for i := 0; i < socketCount; i++ {
+                        	    	if CPUsInSocketSize[i] == 0 {
+                                    		arr = append(arr, 0)
+                            	    	} else {
+                                    		arr = append(arr, 1)
+                            		}
+                    	}
+                    	divided = append(divided, arr)
                 }
-		divided = append(divided, arr)
-        }
+            
+            	glog.Infof("[cpumanager] Guaranteed CPUs detected: %v", amount)
 
-        glog.Infof("[cpumanager] Topology Affinities for pod (divided array): %v", divided)
-	glog.Infof("[cpumanager] Number of Assignable CPUs per Socket: %v", CPUsInSocketSize)	
-	glog.Infof("[cpumanager] Topology Affinities for pod (divided array): %v", divided)	
-	
-	var cpuSocketMask []socketmask.SocketMask	
-	for r := range divided {
-		cpuSocket := socketmask.SocketMask(divided[r])
-		cpuSocketMask = append(cpuSocketMask, cpuSocket)
-	}					
-	return topologymanager.TopologyHints{ 
-		SocketAffinity: cpuSocketMask,
-		Affinity: true,
-        }
+            	glog.Infof("[cpumanager] Topology Affinities for pod (divided array): %v", divided)
+        	glog.Infof("[cpumanager] Number of Assignable CPUs per Socket: %v", CPUsInSocketSize)	
+        	glog.Infof("[cpumanager] Topology Affinities for pod (divided array): %v", divided)	
+        
+       
+        	for r := range divided {
+            		cpuSocket := socketmask.SocketMask(divided[r])
+            		cpuSocketMask = append(cpuSocketMask, cpuSocket)
+        	}    
+    	}  
+    	return topologymanager.TopologyHints{ 
+        	SocketAffinity: cpuSocketMask,
+        	Affinity: true,
+    	}
 }
 
 func (m *manager) Start(activePods ActivePodsFunc, podStatusProvider status.PodStatusProvider, containerRuntime runtimeService) {

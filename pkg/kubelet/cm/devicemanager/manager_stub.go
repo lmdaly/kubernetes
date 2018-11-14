@@ -58,7 +58,7 @@ func (h *ManagerStub) GetCapacity() (v1.ResourceList, v1.ResourceList, []string)
 	return nil, nil, []string{}
 }
 
-func (h *ManagerStub) GetTopologyHints(resource string, amount int) topologymanager.TopologyHints {
+func (h *ManagerStub) GetTopologyHints(pod v1.Pod, container v1.Container) topologymanager.TopologyHints {
        return topologymanager.TopologyHints{}
 }
 
