@@ -41,7 +41,7 @@ type manager struct {
  
 //Interface to be implemented by Topology Allocators 
 type HintProvider interface {
-    	GetTopologyHints(resource string, amount int) TopologyHints
+    	GetTopologyHints(pod v1.Pod, container v1.Container) TopologyHints
 }
  
 type Store interface {
@@ -88,6 +88,7 @@ func (m *manager) calculateTopologyAffinity(pod v1.Pod, container v1.Container) 
 	socketMask := socketmask.NewSocketMask(nil)
 	var maskHolder []string
 	count := 0 
+	affinity := true
         for _, hp := range m.hintProviders {
 		topologyHints := hp.GetTopologyHints(pod, container)
 		if topologyHints.Affinity && topologyHints.SocketAffinity  != nil {
@@ -108,7 +109,7 @@ func (m *manager) calculateTopologyAffinity(pod v1.Pod, container v1.Container) 
 	}
 	return TopologyHints {
 		SocketAffinity: []socketmask.SocketMask{socketMask},
-		Affinity:	true,
+		Affinity:	affinity,
 	}      
 }
 
