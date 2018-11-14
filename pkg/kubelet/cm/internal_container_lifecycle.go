@@ -57,7 +57,7 @@ func (i *internalContainerLifecycleImpl) PreStartContainer(pod *v1.Pod, containe
 func (i *internalContainerLifecycleImpl) PreStopContainer(containerID string) error {
 	if utilfeature.DefaultFeatureGate.Enabled(kubefeatures.CPUManager) {
 		return i.cpuManager.RemoveContainer(containerID)
-	}
+	}		
 	return nil
 }
 
