@@ -284,7 +284,9 @@ func NewContainerManager(mountUtil mount.Interface, cadvisorInterface cadvisor.I
             		nodeConfig.ExperimentalTopologyManagerPolicy,
         	)	
         	glog.Infof("[topologymanager] Initilizing Topology Manager with %s policy", nodeConfig.ExperimentalTopologyManagerPolicy)
-    	}
+    	} else {
+		cm.topologyManager = topologymanager.NewFakeManager()
+	}
 
 	glog.Infof("Creating device plugin manager: %t", devicePluginEnabled)
 	if devicePluginEnabled {

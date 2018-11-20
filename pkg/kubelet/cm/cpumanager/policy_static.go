@@ -220,7 +220,7 @@ func (p *staticPolicy) RemoveContainer(s state.State, containerID string) error 
 func (p *staticPolicy) allocateCPUs(s state.State, numCPUs int, sockets map[int]bool) (cpuset.CPUSet, error) {
 	glog.Infof("[cpumanager] allocateCpus: (numCPUs: %d, socket: %d)", numCPUs, sockets)
         assignableCPUs := cpuset.NewCPUSet()
-        if sockets != nil {
+        if len(sockets) != 0 {	
 		for socketID, socketAvail := range sockets {
 			if socketAvail {
 				assignableCPUs = assignableCPUs.Union(p.assignableCPUs(s).Intersection(p.topology.CPUDetails.CPUsInSocket(socketID)))
