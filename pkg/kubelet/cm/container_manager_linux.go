@@ -263,7 +263,7 @@ func NewContainerManager(mountUtil mount.Interface, cadvisorInterface cadvisor.I
 	
 	// setup topology manager
     	//topologyManager := topologymanager.NewManager()
-	//glog.Infof("[topologymanager] Initilizing Topology Manager...")
+	//klog.Infof("[topologymanager] Initilizing Topology Manager...")
 
 	cm := &containerManagerImpl{
 		cadvisorInterface:   cadvisorInterface,
@@ -279,16 +279,16 @@ func NewContainerManager(mountUtil mount.Interface, cadvisorInterface cadvisor.I
 	}
     
     	if utilfeature.DefaultFeatureGate.Enabled(kubefeatures.TopologyManager){
-        	glog.Infof("Node Config: %v", nodeConfig)
+        	klog.Infof("Node Config: %v", nodeConfig)
         	cm.topologyManager = topologymanager.NewManager(
             		nodeConfig.ExperimentalTopologyManagerPolicy,
         	)	
-        	glog.Infof("[topologymanager] Initilizing Topology Manager with %s policy", nodeConfig.ExperimentalTopologyManagerPolicy)
+        	klog.Infof("[topologymanager] Initilizing Topology Manager with %s policy", nodeConfig.ExperimentalTopologyManagerPolicy)
     	} else {
 		cm.topologyManager = topologymanager.NewFakeManager()
 	}
 
-	glog.Infof("Creating device plugin manager: %t", devicePluginEnabled)
+	klog.Infof("Creating device plugin manager: %t", devicePluginEnabled)
 	if devicePluginEnabled {
 		cm.deviceManager, err = devicemanager.NewManagerImpl(cm.topologyManager)
 		cm.topologyManager.AddHintProvider(cm.deviceManager)

@@ -12,7 +12,7 @@
  
 package topologymanager
 import (
- 	"github.com/golang/glog"	
+ 	"k8s.io/klog"	
  	"k8s.io/api/core/v1"
 	"k8s.io/kubernetes/pkg/kubelet/lifecycle"
 )
@@ -20,31 +20,31 @@ import (
 type fakeManager struct{}
  
 func NewFakeManager() Manager {
-        glog.Infof("[fake topologymanager] NewFakeManager")
+        klog.Infof("[fake topologymanager] NewFakeManager")
  	return &fakeManager{}
 }
 
 func (m *fakeManager) GetAffinity(podUID string, containerName string) TopologyHints {
-	glog.Infof("[fake topologymanager] GetAffinity podUID: %v container name:  %v", podUID, containerName)
+	klog.Infof("[fake topologymanager] GetAffinity podUID: %v container name:  %v", podUID, containerName)
  	return TopologyHints{}
 }
 
 func (m *fakeManager) AddHintProvider(h HintProvider) {
-	glog.Infof("[fake topologymanager] AddHintProvider HintProvider:  %v", h)
+	klog.Infof("[fake topologymanager] AddHintProvider HintProvider:  %v", h)
 }
 
 func (m *fakeManager) AddPod(pod *v1.Pod, containerID string) error {
-	glog.Infof("[fake topologymanager] AddPod  pod: %v container id:  %v", pod, containerID)
+	klog.Infof("[fake topologymanager] AddPod  pod: %v container id:  %v", pod, containerID)
 	return nil
 }
 
 func (m *fakeManager) RemovePod (containerID string) error {
-	glog.Infof("[fake topologymanager] RemovePod container id:  %v", containerID)
+	klog.Infof("[fake topologymanager] RemovePod container id:  %v", containerID)
 	return nil 
 }
 
 func (m *fakeManager) Admit(attrs *lifecycle.PodAdmitAttributes) lifecycle.PodAdmitResult {
- 	glog.Infof("[fake topologymanager] Topology Admit Handler")
+ 	klog.Infof("[fake topologymanager] Topology Admit Handler")
 	return lifecycle.PodAdmitResult{
 		Admit:	true,
 	} 

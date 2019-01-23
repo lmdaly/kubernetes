@@ -1,3 +1,19 @@
+/*
+Copyright 2019 The Kubernetes Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package socketmask
 
 import (
@@ -5,17 +21,18 @@ import (
         "strings"
         "bytes"
         "math"
-        "github.com/golang/glog"
+        "k8s.io/klog"
 )
 
-
+// SocketMask represents the NUMA affinity of a socket.
 type SocketMask []int64
 
+// NewSocketMask creates a new socket mask.
 func NewSocketMask(Mask []int64) SocketMask {
-	sm := Mask
-	return sm
+	return SocketMask(Mask)
 }
 
+// GetSocketMask calculates the socket mask. 
 func (sm SocketMask) GetSocketMask(socketMask []SocketMask, maskHolder []string, count int) (SocketMask, []string) {
 	var socketAffinityInt64 [][]int64
       	for r := range socketMask {
@@ -23,38 +40,21 @@ func (sm SocketMask) GetSocketMask(socketMask []SocketMask, maskHolder []string,
           	socketAffinityInt64 = append(socketAffinityInt64,socketAffinityVals)
     	}
        	if count == 0 {
-<<<<<<< HEAD
-            	maskHolder = sm.BuildMaskHolder(socketAffinityInt64)
-	}
-      	glog.Infof("[socketmask] MaskHolder : %v", maskHolder) 
-        glog.Infof("[socketmask] %v is passed into arrange function", socketMask)   
-        arrangedMask := sm.ArrangeMask(socketAffinityInt64)                   
-        newMask := sm.GetTopologyAffinity(arrangedMask, maskHolder)
-       	glog.Infof("[socketmask] New Mask after getTopologyAffinity (new mask) : %v ",newMask)
-        finalMaskValue := sm.ParseMask(newMask)
-=======
             	maskHolder = buildMaskHolder(socketAffinityInt64)
 	}
-      	glog.Infof("[socketmask] MaskHolder : %v", maskHolder) 
-        glog.Infof("[socketmask] %v is passed into arrange function", socketMask)   
+      	klog.V(4).Infof("[socketmask] MaskHolder : %v", maskHolder) 
+        klog.V(4).Infof("[socketmask] %v is passed into arrange function", socketMask)   
         arrangedMask := arrangeMask(socketAffinityInt64)                   
         newMask := getTopologyAffinity(arrangedMask, maskHolder)
-       	glog.Infof("[socketmask] New Mask after getTopologyAffinity (new mask) : %v ",newMask)
+       	klog.V(4).Infof("[socketmask] New Mask after getTopologyAffinity (new mask) : %v ",newMask)
         finalMaskValue := parseMask(newMask)
->>>>>>> Updated TopologyHints struct and SocketMask type (#12)
-       	glog.Infof("[socketmask] Mask []Int64 (finalMaskValue): %v", finalMaskValue)
+       	klog.V(4).Infof("[socketmask] Mask []Int64 (finalMaskValue): %v", finalMaskValue)
 	maskHolder = newMask     
-        glog.Infof("[socketmask] New MaskHolder: %v", maskHolder)
-	finalSocketMask := SocketMask(finalMaskValue)
-	return finalSocketMask, maskHolder
+        klog.V(4).Infof("[socketmask] New MaskHolder: %v", maskHolder)
+	return SocketMask(finalMaskValue), maskHolder
 }
 
-<<<<<<< HEAD
-func (sm SocketMask) BuildMaskHolder(mask [][]int64) []string {
-=======
 func buildMaskHolder(mask [][]int64) []string {
->>>>>>> Updated TopologyHints struct and SocketMask type (#12)
-        var maskHolder []string
         outerLen := len(mask)
         var innerLen int = 0 
         for i := 0; i < outerLen; i++ {
@@ -62,8 +62,9 @@ func buildMaskHolder(mask [][]int64) []string {
                         innerLen = len(mask[i])
                 }
         }
+	var maskHolder []string
         var buffer bytes.Buffer
-        var i, j int = 0, 0
+	var i, j int = 0, 0
         for i = 0; i < outerLen; i++ {
                 for j = 0; j < innerLen; j++ {
                         buffer.WriteString("1")
@@ -74,19 +75,11 @@ func buildMaskHolder(mask [][]int64) []string {
         return maskHolder
 }
 
-<<<<<<< HEAD
-func (sm SocketMask) GetTopologyAffinity(arrangedMask, maskHolder []string) []string {
-        var topologyTemp []string
-        for i:= 0; i < (len(maskHolder)); i++ {
-                for j:= 0; j < (len(arrangedMask)); j++ {
-                        tempStr := sm.AndOperation(maskHolder[i],arrangedMask[j])
-=======
 func getTopologyAffinity(arrangedMask, maskHolder []string) []string {
         var topologyTemp []string
-        for i:= 0; i < (len(maskHolder)); i++ {
-                for j:= 0; j < (len(arrangedMask)); j++ {
+        for i := 0; i < len(maskHolder); i++ {
+                for j := 0; j < len(arrangedMask); j++ {
                         tempStr := andOperation(maskHolder[i],arrangedMask[j])
->>>>>>> Updated TopologyHints struct and SocketMask type (#12)
                         if strings.Contains(tempStr, "1") {
                                 topologyTemp = append(topologyTemp, tempStr )
                         }
@@ -105,11 +98,7 @@ func getTopologyAffinity(arrangedMask, maskHolder []string) []string {
         return topologyResult
 }
 
-<<<<<<< HEAD
-func (sm SocketMask) ParseMask(mask []string) []int64 {
-=======
 func parseMask(mask []string) []int64 {
->>>>>>> Updated TopologyHints struct and SocketMask type (#12)
         var maskStr string
         min := strings.Count(mask[0], "1")
         var num, index int
@@ -126,20 +115,16 @@ func parseMask(mask []string) []int64 {
         for _, char := range maskStr {
                 convertedStr, err := strconv.Atoi(string(char))
                 if err != nil {
-                        glog.Errorf("Could not convert string to int. Err: %v", err)
+                        klog.V(4).Infof("could not convert mask character: %v", err)
                         return maskInt
                 }
                 maskInt = append(maskInt, int64(convertedStr))
         }
-        glog.Infof("[socketmask] Mask Int in Parse Mask: %v", maskInt)
+        klog.V(4).Infof("[socketmask] Mask Int in Parse Mask: %v", maskInt)
         return maskInt
 }
 
-<<<<<<< HEAD
-func (sm SocketMask) ArrangeMask(mask [][]int64) []string {
-=======
 func arrangeMask(mask [][]int64) []string {
->>>>>>> Updated TopologyHints struct and SocketMask type (#12)
         var socketStr []string
         var bufferNew bytes.Buffer
         outerLen := len(mask)
@@ -158,11 +143,7 @@ func arrangeMask(mask [][]int64) []string {
         return socketStr
 }
 
-<<<<<<< HEAD
-func (sm SocketMask) AndOperation(val1, val2 string) (string) {
-=======
 func andOperation(val1, val2 string) (string) {
->>>>>>> Updated TopologyHints struct and SocketMask type (#12)
         l1, l2 := len(val1), len(val2)
         //compare lengths of strings - pad shortest with trailing zeros
         if l1 != l2 {
@@ -179,11 +160,9 @@ func andOperation(val1, val2 string) (string) {
         length := len(val1)
         byteArr := make([]byte, length)
         for i := 0; i < length ; i++ {
-                byteArr[i] = (val1[i] & val2[i])
+                byteArr[i] = val1[i] & val2[i]
         }
-        var finalStr string
-        finalStr = string(byteArr[:])
 
-        return finalStr
+        return string(byteArr[:])
 }
 

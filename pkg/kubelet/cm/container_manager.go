@@ -98,6 +98,14 @@ type ContainerManager interface {
 	// GetPodCgroupRoot returns the cgroup which contains all pods.
 	GetPodCgroupRoot() string
 	
+	// GetPluginRegistrationHandler returns a plugin registration handler
+	// The pluginwatcher's Handlers allow to have a single module for handling
+	// registration.
+	GetPluginRegistrationHandler() pluginwatcher.PluginHandler
+
+	// GetDevices returns information about the devices assigned to pods and containers
+	GetDevices(podUID, containerName string) []*podresourcesapi.ContainerDevices
+		
 	GetTopologyPodAdmitHandler() topologymanager.Manager
 }
 
@@ -117,6 +125,7 @@ type NodeConfig struct {
 	ExperimentalCPUManagerReconcilePeriod time.Duration
 	ExperimentalPodPidsLimit              int64
 	EnforceCPULimits                      bool
+	CPUCFSQuotaPeriod                     time.Duration
         ExperimentalTopologyManagerPolicy     string
 }
 

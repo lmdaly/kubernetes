@@ -21,7 +21,6 @@ import (
 	"math"
 	"sync"
 	"time"
-	"github.com/golang/glog"
 	cadvisorapi "github.com/google/cadvisor/info/v1"
 	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -116,7 +115,7 @@ func NewManager(cpuPolicyName string, reconcilePeriod time.Duration, machineInfo
 		if err != nil {
 			return nil, err
 		}
-		glog.Infof("[cpumanager] detected CPU topology: %v", topo)
+		klog.Infof("[cpumanager] detected CPU topology: %v", topo)
 		reservedCPUs, ok := nodeAllocatableReservation[v1.ResourceCPU]
 		if !ok {
 			// The static policy cannot initialize without this information.
@@ -169,39 +168,39 @@ func (m *manager) GetTopologyHints(pod v1.Pod, container v1.Container) topologym
                 	continue
             	}
         
-        	glog.Infof("[cpumanager] Guaranteed CPUs detected: %v", amount)
+        	klog.Infof("[cpumanager] Guaranteed CPUs detected: %v", amount)
 
         	// Discover machine topology
             	topo, err := topology.Discover(m.machineInfo)
             	if err != nil {
-                    glog.Infof("[cpu manager] error discovering topology")
+                    klog.Infof("[cpu manager] error discovering topology")
             	}
         
         	// Get no. of shared CPUs
         	allCPUs := topo.CPUDetails.CPUs()
-        	glog.Infof("[cpumanager] Shared CPUs: %v", allCPUs)        
+        	klog.Infof("[cpumanager] Shared CPUs: %v", allCPUs)        
         
         	// Get Reserved CPUs
         	reservedCPUs := m.nodeAllocatableReservation[v1.ResourceCPU]	
         	reservedCPUsFloat := float64(reservedCPUs.MilliValue()) / 1000
         	numReservedCPUs := int(math.Ceil(reservedCPUsFloat))        	
         	reserved, _ := takeByTopology(topo, allCPUs, numReservedCPUs)
-        	glog.Infof("[cpumanager] Reserved CPUs: %v", reserved)
+        	klog.Infof("[cpumanager] Reserved CPUs: %v", reserved)
                 
         	//Get Assignable CPUs (Shared - Reserved)
         	assignableCPUs := m.state.GetDefaultCPUSet().Difference(reserved)
-        	glog.Infof("[cpumanager] Assignable CPUs (Shared - Reserved): %v", assignableCPUs)
+        	klog.Infof("[cpumanager] Assignable CPUs (Shared - Reserved): %v", assignableCPUs)
 
         	// New CPUAccumulator
         	cpuAccum := newCPUAccumulator(topo, assignableCPUs, amount)     
 
             	// Get total number of sockets on machine 
             	socketCount := topo.NumSockets
-            	glog.Infof("[cpumanager] Number of sockets on machine (available and unavailable): %v", socketCount)
+            	klog.Infof("[cpumanager] Number of sockets on machine (available and unavailable): %v", socketCount)
 
         	// Check for empty CPUs
         	freeCPUs := cpuAccum.freeCPUs()
-        	glog.Infof("[cpumanager] Assignable CPUs (all Sockets): %v", freeCPUs)	
+        	klog.Infof("[cpumanager] Assignable CPUs (all Sockets): %v", freeCPUs)	
 
         	// Get Number of free CPUs per Socket
         	CPUsInSocketSize := make([]int64, socketCount)
@@ -210,7 +209,7 @@ func (m *manager) GetTopologyHints(pod v1.Pod, container v1.Container) topologym
         	var divided [][]int64
         	for i := 0; i < socketCount; i++ {
             		CPUsInSocket := cpuAccum.details.CPUsInSocket(i)
-            		glog.Infof("[cpumanager] Assignable CPUs on Socket %v: %v", i, CPUsInSocket)
+            		klog.Infof("[cpumanager] Assignable CPUs on Socket %v: %v", i, CPUsInSocket)
             		CPUsInSocketSize[i] = int64(CPUsInSocket.Size())
             		sum += CPUsInSocketSize[i]
             		if CPUsInSocketSize[i] >= amount64 {
@@ -236,11 +235,11 @@ func (m *manager) GetTopologyHints(pod v1.Pod, container v1.Container) topologym
                     	divided = append(divided, arr)
                 }
             
-            	glog.Infof("[cpumanager] Guaranteed CPUs detected: %v", amount)
+            	klog.Infof("[cpumanager] Guaranteed CPUs detected: %v", amount)
 
-            	glog.Infof("[cpumanager] Topology Affinities for pod (divided array): %v", divided)
-        	glog.Infof("[cpumanager] Number of Assignable CPUs per Socket: %v", CPUsInSocketSize)	
-        	glog.Infof("[cpumanager] Topology Affinities for pod (divided array): %v", divided)	
+            	klog.Infof("[cpumanager] Topology Affinities for pod (divided array): %v", divided)
+        	klog.Infof("[cpumanager] Number of Assignable CPUs per Socket: %v", CPUsInSocketSize)	
+        	klog.Infof("[cpumanager] Topology Affinities for pod (divided array): %v", divided)	
         
        
         	for r := range divided {

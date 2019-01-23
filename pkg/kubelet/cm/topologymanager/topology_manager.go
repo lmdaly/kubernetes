@@ -13,7 +13,7 @@
 package topologymanager
 import (
 	"k8s.io/kubernetes/pkg/kubelet/cm/topologymanager/socketmask"
- 	"github.com/golang/glog"	
+ 	"k8s.io/klog"	
  	"k8s.io/api/core/v1"
 	"k8s.io/kubernetes/pkg/kubelet/lifecycle"
 )
@@ -55,7 +55,7 @@ type containers map[string]TopologyHints
 var _ Manager = &manager{}
 type policyName string
 func NewManager(topologyPolicyName string) Manager {
- 	glog.Infof("[topologymanager] Creating topology manager with %s policy", topologyPolicyName)
+ 	klog.Infof("[topologymanager] Creating topology manager with %s policy", topologyPolicyName)
     	var policy Policy 
     
     	switch policyName(topologyPolicyName) {
@@ -67,7 +67,7 @@ func NewManager(topologyPolicyName string) Manager {
         	policy = NewStrictPolicy()    
     
     	default:
-        	glog.Errorf("[topologymanager] Unknow policy %s, using default policy %s", topologyPolicyName, PolicyPreferred)
+        	klog.Errorf("[topologymanager] Unknow policy %s, using default policy %s", topologyPolicyName, PolicyPreferred)
 		policy = NewPreferredPolicy()
     	}    
     
@@ -99,13 +99,13 @@ func (m *manager) calculateTopologyAffinity(pod v1.Pod, container v1.Container) 
 			socketMask, maskHolder = socketMask.GetSocketMask(topologyHints.SocketAffinity, maskHolder, count)
 			count++
 		} else if topologyHints.Affinity && topologyHints.SocketAffinity  == nil {
-			glog.Infof("[topologymanager] NO Topology Affinity.")
+			klog.Infof("[topologymanager] NO Topology Affinity.")
 			return TopologyHints {
                    		SocketAffinity: []socketmask.SocketMask{socketMask},
                     		Affinity:       false,
                 	}
 		} else if  !topologyHints.Affinity && topologyHints.SocketAffinity  != nil {
-			glog.Infof("[topologymanager] Cross Socket Topology Affinity")
+			klog.Infof("[topologymanager] Cross Socket Topology Affinity")
 			affinity = false
 			socketMask, maskHolder = socketMask.GetSocketMask(topologyHints.SocketAffinity, maskHolder, count)
 			count++
@@ -130,15 +130,15 @@ func (m *manager) RemovePod (containerID string) error {
  	podUIDString := m.podMap[containerID]
 	delete(m.podTopologyHints, podUIDString)
 	delete(m.podMap, containerID)
-	glog.Infof("[topologymanager] RemovePod - Container ID: %v podTopologyHints: %v", containerID, m.podTopologyHints)
+	klog.Infof("[topologymanager] RemovePod - Container ID: %v podTopologyHints: %v", containerID, m.podTopologyHints)
 	return nil 
 }
 
 func (m *manager) Admit(attrs *lifecycle.PodAdmitAttributes) lifecycle.PodAdmitResult {
- 	glog.Infof("[topologymanager] Topology Admit Handler")
+ 	klog.Infof("[topologymanager] Topology Admit Handler")
  	pod := attrs.Pod
  	c := make (containers)
-	glog.Infof("[topologymanager] Pod QoS Level: %v", pod.Status.QOSClass)
+	klog.Infof("[topologymanager] Pod QoS Level: %v", pod.Status.QOSClass)
 	
 	qosClass := pod.Status.QOSClass
 	
@@ -152,10 +152,10 @@ func (m *manager) Admit(attrs *lifecycle.PodAdmitAttributes) lifecycle.PodAdmitR
 			c[container.Name] = result
 		}
 		m.podTopologyHints[string(pod.UID)] = c
-		glog.Infof("[topologymanager] Topology Affinity for Pod: %v are %v", pod.UID, m.podTopologyHints[string(pod.UID)])
+		klog.Infof("[topologymanager] Topology Affinity for Pod: %v are %v", pod.UID, m.podTopologyHints[string(pod.UID)])
 	
 	} else {
-		glog.Infof("[topologymanager] Topology Manager only affinitises Guaranteed pods.")
+		klog.Infof("[topologymanager] Topology Manager only affinitises Guaranteed pods.")
 	}
 	
 	return lifecycle.PodAdmitResult{

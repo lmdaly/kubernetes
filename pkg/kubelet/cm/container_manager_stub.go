@@ -107,6 +107,10 @@ func (cm *containerManagerStub) GetPodCgroupRoot() string {
 	return ""
 }
 
+func (cm *containerManagerStub) GetDevices(_, _ string) []*podresourcesapi.ContainerDevices {
+	return nil
+}
+
 func (cm *containerManagerStub) GetTopologyPodAdmitHandler() topologymanager.Manager {
        return nil
 }

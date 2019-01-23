@@ -21,17 +21,24 @@ import (
 
 	"k8s.io/api/core/v1"
 	podresourcesapi "k8s.io/kubernetes/pkg/kubelet/apis/podresources/v1alpha1"
+	pluginapi "k8s.io/kubernetes/pkg/kubelet/apis/deviceplugin/v1beta1"
 	"k8s.io/kubernetes/pkg/kubelet/config"
 	kubecontainer "k8s.io/kubernetes/pkg/kubelet/container"
 	"k8s.io/kubernetes/pkg/kubelet/lifecycle"
 	"k8s.io/kubernetes/pkg/kubelet/cm/topologymanager"
-	schedulercache "k8s.io/kubernetes/pkg/scheduler/cache"
+	watcher "k8s.io/kubernetes/pkg/kubelet/util/pluginwatcher"
+	schedulernodeinfo "k8s.io/kubernetes/pkg/scheduler/nodeinfo"
 )
 
 // Manager manages all the Device Plugins running on a node.
 type Manager interface {
 	// Start starts device plugin registration service.
 	Start(activePods ActivePodsFunc, sourcesReady config.SourcesReady) error
+
+	// Devices is the map of devices that have registered themselves
+	// against the manager.
+	// The map key is the ResourceName of the device plugins.
+	Devices() map[string][]pluginapi.Device	
 
 	// Allocate configures and assigns devices to pods. The pods are provided
 	// through the pod admission attributes in the attrs argument. From the
@@ -54,6 +61,11 @@ type Manager interface {
 	// GetCapacity returns the amount of available device plugin resource capacity, resource allocatable
 	// and inactive device plugin resources previously registered on the node.
 	GetCapacity() (v1.ResourceList, v1.ResourceList, []string)
+	
+	GetWatcherHandler() watcher.PluginHandler
+
+	// GetDevices returns information about the devices assigned to pods and containers
+	GetDevices(podUID, containerName string) []*podresourcesapi.ContainerDevices
 	
 	// TopologyManager HintProvider provider indicates the Device Manager implements the Topology Manager Interface
      	// and is consulted to make Topology aware resource alignments
@@ -80,6 +92,9 @@ const (
 	// errUnsupportedVersion is the error raised when the device plugin uses an API version not
 	// supported by the Kubelet registry
 	errUnsupportedVersion = "requested API version %q is not supported by kubelet. Supported version is %q"
+	// errDevicePluginAlreadyExists is the error raised when a device plugin with the
+	// same Resource Name tries to register itself
+	errDevicePluginAlreadyExists = "another device plugin already registered this Resource Name"
 	// errInvalidResourceName is the error raised when a device plugin is registering
 	// itself with an invalid ResourceName
 	errInvalidResourceName = "the ResourceName %q is invalid"
@@ -87,6 +102,8 @@ const (
 	errEndpointStopped = "endpoint %v has been stopped"
 	// errBadSocket is the error raised when the registry socket path is not absolute
 	errBadSocket = "bad socketPath, must be an absolute path:"
+	// errRemoveSocket is the error raised when the registry could not remove the existing socket
+	errRemoveSocket = "failed to remove socket while starting device plugin registry, with error"
 	// errListenSocket is the error raised when the registry could not listen on the socket
 	errListenSocket = "failed to listen to socket while starting device plugin registry, with error"
 	// errListAndWatch is the error raised when ListAndWatch ended unsuccessfully
