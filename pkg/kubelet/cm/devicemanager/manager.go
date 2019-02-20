@@ -22,6 +22,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+    	"reflect"
 	"sync"
 	"time"
 
@@ -38,6 +39,8 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/checkpointmanager/errors"
 	"k8s.io/kubernetes/pkg/kubelet/cm/devicemanager/checkpoint"
 	"k8s.io/kubernetes/pkg/kubelet/config"
+	"k8s.io/kubernetes/pkg/kubelet/cm/topologymanager"
+	"k8s.io/kubernetes/pkg/kubelet/cm/topologymanager/socketmask"
 	"k8s.io/kubernetes/pkg/kubelet/lifecycle"
 	"k8s.io/kubernetes/pkg/kubelet/metrics"
 	watcher "k8s.io/kubernetes/pkg/kubelet/util/pluginwatcher"
@@ -88,11 +91,14 @@ type ManagerImpl struct {
 	// podDevices contains pod to allocated device mapping.
 	podDevices        podDevices
 	checkpointManager checkpointmanager.CheckpointManager
+    
+    //Store of Topology Affinties that the Device Manager can query
+    topologyAffinityStore topologymanager.Store
 }
 
 type endpointInfo struct {
-	e    endpoint
-	opts *pluginapi.DevicePluginOptions
+	e	endpoint
+	opts	*pluginapi.DevicePluginOptions
 }
 
 type sourcesReadyStub struct{}
@@ -101,11 +107,11 @@ func (s *sourcesReadyStub) AddSource(source string) {}
 func (s *sourcesReadyStub) AllReady() bool          { return true }
 
 // NewManagerImpl creates a new manager.
-func NewManagerImpl() (*ManagerImpl, error) {
-	return newManagerImpl(pluginapi.KubeletSocket)
+func NewManagerImpl(topologyAffinityStore topologymanager.Store) (*ManagerImpl, error) {
+	return newManagerImpl(pluginapi.KubeletSocket, topologyAffinityStore)
 }
 
-func newManagerImpl(socketPath string) (*ManagerImpl, error) {
+func newManagerImpl(socketPath string, topologyAffinityStore topologymanager.Store) (*ManagerImpl, error) {
 	klog.V(2).Infof("Creating Device Plugin manager at %s", socketPath)
 
 	if socketPath == "" || !filepath.IsAbs(socketPath) {
@@ -114,14 +120,15 @@ func newManagerImpl(socketPath string) (*ManagerImpl, error) {
 
 	dir, file := filepath.Split(socketPath)
 	manager := &ManagerImpl{
-		endpoints: make(map[string]endpointInfo),
-
-		socketname:       file,
-		socketdir:        dir,
-		healthyDevices:   make(map[string]sets.String),
-		unhealthyDevices: make(map[string]sets.String),
-		allocatedDevices: make(map[string]sets.String),
-		podDevices:       make(podDevices),
+		endpoints:          make(map[string]endpointInfo),
+		socketname:         file,
+		socketdir:          dir,
+		healthyDevices:     make(map[string]sets.String),
+		unhealthyDevices:   make(map[string]sets.String),
+		allocatedDevices:   make(map[string]sets.String),
+		//pluginOpts:         make(map[string]*pluginapi.DevicePluginOptions),
+		podDevices:         make(podDevices),
+        topologyAffinityStore:  topologyAffinityStore,
 	}
 	manager.callback = manager.genericDeviceUpdateCallback
 
@@ -138,6 +145,115 @@ func newManagerImpl(socketPath string) (*ManagerImpl, error) {
 	return manager, nil
 }
 
+func (m *ManagerImpl) GetTopologyHints(pod v1.Pod, container v1.Container) topologymanager.TopologyHints {
+	devices := m.Devices()
+    	klog.Infof("Devices in GetTopologyHints: %v", devices)
+        var deviceMask []socketmask.SocketMask
+        count := false
+        affinity := true
+	for resourceObj, amountObj := range container.Resources.Requests {
+        	resource := string(resourceObj)
+            	amount := int64(amountObj.Value())
+            	if m.isDevicePluginResource(resource){
+                	klog.Infof("%v is a resource managed by device manager.", resource)
+                	if _, ok := m.healthyDevices[resource]; !ok {
+                    		klog.Infof("No healthy devices for resource %v", resource)
+                    		continue
+                	}
+                	// Gets Devices in use.
+			m.updateAllocatedDevices(m.activePods())
+			devicesInUse := m.allocatedDevices[resource]
+			klog.Infof("Devices in use:%v", devicesInUse)
+
+                	// Gets a list of available devices.
+                	available := m.healthyDevices[resource].Difference(devicesInUse)
+                	if int64(available.Len()) < amount {
+                		klog.Infof("requested number of devices unavailable for %s. Requested: %d, Available: %d", resource, amount, available.Len())
+                    		return topologymanager.TopologyHints{
+       					SocketAffinity:	nil,
+                    			Affinity: 	false,
+                    		}
+                	}
+                	klog.Infof("[devicemanager] Available devices for resource %v: %v", resource, available)
+                	device_socket_avail := make(map[int64]int64)
+                	largestSkt := int64(0)
+               
+                	for availID := range available {
+                		for _, device := range devices[resource] {
+                        		klog.Infof("[device-manager] AvailID: %v DeviceID: %v", availID, device)
+                        		if availID == device.ID {
+                            			socket := device.Socket
+                       				device_socket_avail[socket] += 1
+                            			if socket > largestSkt {
+                                			largestSkt = socket
+                            			}
+                        		}                            
+                    		}
+                	}
+                
+                	klog.Infof("Largest Socket is: %v", largestSkt)
+                	var mask socketmask.SocketMask
+                	var crossSocket socketmask.SocketMask
+                	crossSocket = make([]int64, (largestSkt+1))
+                	var overwriteDeviceMask []socketmask.SocketMask
+                	for socket, amountAvail := range device_socket_avail {
+                    		klog.Infof("Socket: %v, Avail: %v", socket, amountAvail)
+                    		mask = nil
+                    		if amountAvail >= amount {
+                        		for i := int64(0); i < largestSkt+1; i++ {
+                            			if i == socket {
+                                			mask = append(mask, 1)
+                            			} else {
+                                			mask = append(mask, 0)
+                            			}
+                        		}
+                        		klog.Infof("Mask: %v", mask)
+                        		if !count {
+                            			deviceMask = append(deviceMask, mask)
+                        		} else {
+                            			for _, storedMask := range deviceMask {    
+                                			if reflect.DeepEqual(storedMask, mask) {
+                                    				overwriteDeviceMask = append(overwriteDeviceMask, storedMask)
+                                			}
+                            			}
+                        		}                           
+                    		}	 
+                    		//crossSocket can be duplicate of mask need to remove if so
+                    		crossSocket[socket] = 1                 
+                	}
+                	if !count {
+                    		deviceMask = append(deviceMask, crossSocket)
+                	} else {
+                    		for _, storedMask := range deviceMask {
+                        		if reflect.DeepEqual(storedMask, crossSocket) {
+                            			overwriteDeviceMask = append(overwriteDeviceMask, crossSocket)
+                        		}
+                    		}
+                    		deviceMask = overwriteDeviceMask
+                	}
+                	klog.Infof("deviceMask: %v", deviceMask)
+                	count = true
+			if len(device_socket_avail) > 1 {
+				klog.Infof("Device Socket Avail > 1")
+				affinity = false
+				for _, outerMask := range deviceMask {
+					for _, innerMask := range outerMask {
+						if innerMask == 0 {
+							affinity = true
+							break
+						}
+					}
+				}
+			}
+	    	}
+	}
+	klog.Infof("Devie Affinity: %v", affinity)
+        return topologymanager.TopologyHints{
+            SocketAffinity:	deviceMask,
+            Affinity:	affinity,
+        }
+}
+    	
 func (m *ManagerImpl) genericDeviceUpdateCallback(resourceName string, devices []pluginapi.Device) {
 	m.mutex.Lock()
 	m.healthyDevices[resourceName] = sets.NewString()
@@ -264,22 +380,34 @@ func (m *ManagerImpl) ValidatePlugin(pluginName string, endpoint string, version
 // TODO: Start the endpoint and wait for the First ListAndWatch call
 //       before registering the plugin
 func (m *ManagerImpl) RegisterPlugin(pluginName string, endpoint string, versions []string) error {
-	klog.V(2).Infof("Registering Plugin %s at endpoint %s", pluginName, endpoint)
-
-	e, err := newEndpointImpl(endpoint, pluginName, m.callback)
-	if err != nil {
-		return fmt.Errorf("Failed to dial device plugin with socketPath %s: %v", endpoint, err)
-	}
-
+	klog.V(2).Infof("Registering Plugin %s at endpoint %s", pluginName, endpoint)		
+	
+	e, err := newEndpointImpl(endpoint, pluginName, m.callback)		
+	if err != nil {		
+		return fmt.Errorf("Failed to dial device plugin with socketPath %s: %v", endpoint, err)		
+	}		
 	options, err := e.client.GetDevicePluginOptions(context.Background(), &pluginapi.Empty{})
-	if err != nil {
-		return fmt.Errorf("Failed to get device plugin options: %v", err)
-	}
-
-	m.registerEndpoint(pluginName, options, e)
+	if err != nil {		
+		return fmt.Errorf("Failed to get device plugin options: %v", err)		
+	}		
+	
+	m.registerEndpoint(pluginName, options, e)		
 	go m.runEndpoint(pluginName, e)
-
 	return nil
+}
+
+// Devices is the map of devices that are known by the Device
+// Plugin manager with the kind of the devices as key
+func (m *ManagerImpl) Devices() map[string][]pluginapi.Device {
+    m.mutex.Lock()
+	defer m.mutex.Unlock()
+
+	devs := make(map[string][]pluginapi.Device)
+	for k, eI := range m.endpoints {
+		klog.V(3).Infof("Endpoint: %+v: %p", k, eI.e)
+		devs[k] = eI.e.getDevices(k)
+	}
+	return devs
 }
 
 // DeRegisterPlugin deregisters the plugin
@@ -581,7 +709,8 @@ func (m *ManagerImpl) updateAllocatedDevices(activePods []*v1.Pod) {
 // Returns list of device Ids we need to allocate with Allocate rpc call.
 // Returns empty list in case we don't need to issue the Allocate rpc call.
 func (m *ManagerImpl) devicesToAllocate(podUID, contName, resource string, required int, reusableDevices sets.String) (sets.String, error) {
-	m.mutex.Lock()
+	allDevices := m.Devices()
+    	m.mutex.Lock()
 	defer m.mutex.Unlock()
 	needed := required
 	// Gets list of devices that have already been allocated.
@@ -625,7 +754,41 @@ func (m *ManagerImpl) devicesToAllocate(podUID, contName, resource string, requi
 	if available.Len() < needed {
 		return nil, fmt.Errorf("requested number of devices unavailable for %s. Requested: %d, Available: %d", resource, needed, available.Len())
 	}
-	allocated := available.UnsortedList()[:needed]
+    
+    	//Get Topology Mask for pod/container here, check available against devices to get devices that have the same socket and update available to these
+    	podTopologyAffinity := m.topologyAffinityStore.GetAffinity(podUID, contName)
+    	klog.Infof("Topology Affinities for pod %v container %v are: %v", podUID, contName, podTopologyAffinity)
+    
+    	sockets := make(map[int]bool)
+    	for _, bitMasks := range podTopologyAffinity.SocketAffinity {
+       		for counter, bit := range bitMasks {
+                	if bit == int64(1) {
+                        	sockets[counter] = true
+                	}
+            	}
+        }
+
+        allocated := available.UnsortedList()[:needed]
+    	availableTopologyAligned := available
+    	klog.Infof("allDevice: %v", allDevices)
+    	for availID := range available {
+        	for _, device := range allDevices[resource] {
+            		klog.Infof("AvailID: %v DeviceID: %v", availID, device)
+            		if availID == device.ID {
+                		if !sockets[int(device.Socket)] {
+                    			delete(availableTopologyAligned, availID)
+                		}
+                	break
+            		}	    
+        	}
+    	}
+    
+	if int(availableTopologyAligned.Len()) < needed {
+        	klog.Infof("requested number of devices unavailable in an Topology Aligned Manner for %s. Choosing arbitrary free devices.", resource)
+	} else {
+         	klog.Infof("Chosing Topology Aligned Devices for %s.", resource)
+         	allocated = availableTopologyAligned.UnsortedList()[:needed]
+    	}
 	// Updates m.allocatedDevices with allocated devices to prevent them
 	// from being allocated to other pods/containers, given that we are
 	// not holding lock during the rpc call.

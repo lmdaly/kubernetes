@@ -26,6 +26,7 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/cm/cpumanager"
 	"k8s.io/kubernetes/pkg/kubelet/config"
 	kubecontainer "k8s.io/kubernetes/pkg/kubelet/container"
+	"k8s.io/kubernetes/pkg/kubelet/cm/topologymanager"
 	"k8s.io/kubernetes/pkg/kubelet/lifecycle"
 	"k8s.io/kubernetes/pkg/kubelet/status"
 	"k8s.io/kubernetes/pkg/kubelet/util/pluginwatcher"
@@ -99,7 +100,7 @@ func (cm *containerManagerStub) UpdatePluginResources(*schedulernodeinfo.NodeInf
 }
 
 func (cm *containerManagerStub) InternalContainerLifecycle() InternalContainerLifecycle {
-	return &internalContainerLifecycleImpl{cpumanager.NewFakeManager()}
+	return &internalContainerLifecycleImpl{cpumanager.NewFakeManager(), topologymanager.NewFakeManager()}
 }
 
 func (cm *containerManagerStub) GetPodCgroupRoot() string {
@@ -108,6 +109,10 @@ func (cm *containerManagerStub) GetPodCgroupRoot() string {
 
 func (cm *containerManagerStub) GetDevices(_, _ string) []*podresourcesapi.ContainerDevices {
 	return nil
+}
+
+func (cm *containerManagerStub) GetTopologyPodAdmitHandler() topologymanager.Manager {
+       return nil
 }
 
 func NewStubContainerManager() ContainerManager {

@@ -48,6 +48,7 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/cadvisor"
 	"k8s.io/kubernetes/pkg/kubelet/cm/cpumanager"
 	"k8s.io/kubernetes/pkg/kubelet/cm/devicemanager"
+	"k8s.io/kubernetes/pkg/kubelet/cm/topologymanager"
 	cmutil "k8s.io/kubernetes/pkg/kubelet/cm/util"
 	"k8s.io/kubernetes/pkg/kubelet/config"
 	kubecontainer "k8s.io/kubernetes/pkg/kubelet/container"
@@ -137,6 +138,9 @@ type containerManagerImpl struct {
 	deviceManager devicemanager.Manager
 	// Interface for CPU affinity management.
 	cpuManager cpumanager.Manager
+	// Interface for Topology resource co-ordination
+    	topologyManager topologymanager.Manager
+
 }
 
 type features struct {
@@ -269,6 +273,10 @@ func NewContainerManager(mountUtil mount.Interface, cadvisorInterface cadvisor.I
 	if err != nil {
 		return nil, err
 	}
+	
+	// setup topology manager
+    	//topologyManager := topologymanager.NewManager()
+	//klog.Infof("[topologymanager] Initilizing Topology Manager...")
 
 	cm := &containerManagerImpl{
 		cadvisorInterface:   cadvisorInterface,
@@ -281,11 +289,23 @@ func NewContainerManager(mountUtil mount.Interface, cadvisorInterface cadvisor.I
 		cgroupRoot:          cgroupRoot,
 		recorder:            recorder,
 		qosContainerManager: qosContainerManager,
+		//topologyManager:     topologyManager,
+	}
+    
+    	if utilfeature.DefaultFeatureGate.Enabled(kubefeatures.TopologyManager){
+        	klog.Infof("Node Config: %v", nodeConfig)
+        	cm.topologyManager = topologymanager.NewManager(
+            		nodeConfig.ExperimentalTopologyManagerPolicy,
+        	)	
+        	klog.Infof("[topologymanager] Initilizing Topology Manager with %s policy", nodeConfig.ExperimentalTopologyManagerPolicy)
+    	} else {
+		cm.topologyManager = topologymanager.NewFakeManager()
 	}
 
 	klog.Infof("Creating device plugin manager: %t", devicePluginEnabled)
 	if devicePluginEnabled {
-		cm.deviceManager, err = devicemanager.NewManagerImpl()
+		cm.deviceManager, err = devicemanager.NewManagerImpl(cm.topologyManager)
+		cm.topologyManager.AddHintProvider(cm.deviceManager)
 	} else {
 		cm.deviceManager, err = devicemanager.NewManagerStub()
 	}
@@ -301,11 +321,13 @@ func NewContainerManager(mountUtil mount.Interface, cadvisorInterface cadvisor.I
 			machineInfo,
 			cm.GetNodeAllocatableReservation(),
 			nodeConfig.KubeletRootDir,
+			cm.topologyManager,
 		)
 		if err != nil {
 			klog.Errorf("failed to initialize cpu manager: %v", err)
 			return nil, err
 		}
+		 cm.topologyManager.AddHintProvider(cm.cpuManager)
 	}
 
 	return cm, nil
@@ -331,7 +353,7 @@ func (cm *containerManagerImpl) NewPodContainerManager() PodContainerManager {
 }
 
 func (cm *containerManagerImpl) InternalContainerLifecycle() InternalContainerLifecycle {
-	return &internalContainerLifecycleImpl{cm.cpuManager}
+	return &internalContainerLifecycleImpl{cm.cpuManager, cm.topologyManager}
 }
 
 // Create a cgroup container manager.
@@ -644,6 +666,10 @@ func (cm *containerManagerImpl) GetResources(pod *v1.Pod, container *v1.Containe
 
 func (cm *containerManagerImpl) UpdatePluginResources(node *schedulernodeinfo.NodeInfo, attrs *lifecycle.PodAdmitAttributes) error {
 	return cm.deviceManager.Allocate(node, attrs)
+}
+
+func (cm *containerManagerImpl) GetTopologyPodAdmitHandler() topologymanager.Manager {
+       return cm.topologyManager
 }
 
 func (cm *containerManagerImpl) SystemCgroupsLimit() v1.ResourceList {
