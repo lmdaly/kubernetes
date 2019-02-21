@@ -95,16 +95,14 @@ func (m *manager) calculateTopologyAffinity(pod v1.Pod, container v1.Container) 
 	affinity := true
         for _, hp := range m.hintProviders {
 		topologyHints := hp.GetTopologyHints(pod, container)
+        if !topologyHints.Affinity && topologyHints.SocketAffinity == nil {
+            klog.Infof("[topologymanager] Hint Provider does not care about this container")
+            continue
+        }
 		if topologyHints.Affinity && topologyHints.SocketAffinity  != nil {
 			socketMask, maskHolder = socketMask.GetSocketMask(topologyHints.SocketAffinity, maskHolder, count)
 			count++
-		} else if topologyHints.Affinity && topologyHints.SocketAffinity  == nil {
-			klog.Infof("[topologymanager] NO Topology Affinity.")
-			return TopologyHints {
-                   		SocketAffinity: []socketmask.SocketMask{socketMask},
-                    		Affinity:       false,
-                	}
-		} else if  !topologyHints.Affinity && topologyHints.SocketAffinity  != nil {
+		} else if !topologyHints.Affinity && topologyHints.SocketAffinity  != nil {
 			klog.Infof("[topologymanager] Cross Socket Topology Affinity")
 			affinity = false
 			socketMask, maskHolder = socketMask.GetSocketMask(topologyHints.SocketAffinity, maskHolder, count)
