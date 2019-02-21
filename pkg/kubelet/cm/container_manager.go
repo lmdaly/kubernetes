@@ -24,6 +24,7 @@ import (
 	"k8s.io/api/core/v1"
 	internalapi "k8s.io/kubernetes/pkg/kubelet/apis/cri"
 	podresourcesapi "k8s.io/kubernetes/pkg/kubelet/apis/podresources/v1alpha1"
+	"k8s.io/kubernetes/pkg/kubelet/cm/topologymanager"
 	"k8s.io/kubernetes/pkg/kubelet/config"
 	kubecontainer "k8s.io/kubernetes/pkg/kubelet/container"
 	evictionapi "k8s.io/kubernetes/pkg/kubelet/eviction/api"
@@ -104,6 +105,9 @@ type ContainerManager interface {
 
 	// GetDevices returns information about the devices assigned to pods and containers
 	GetDevices(podUID, containerName string) []*podresourcesapi.ContainerDevices
+
+	// GetTopologyPodAdmitHandler returns an instance of the TopologyManager for Pod Admission
+	GetTopologyPodAdmitHandler() topologymanager.Manager
 }
 
 type NodeConfig struct {
@@ -123,6 +127,7 @@ type NodeConfig struct {
 	ExperimentalPodPidsLimit              int64
 	EnforceCPULimits                      bool
 	CPUCFSQuotaPeriod                     time.Duration
+	ExperimentalTopologyManagerPolicy     string
 }
 
 type NodeAllocatableConfig struct {
