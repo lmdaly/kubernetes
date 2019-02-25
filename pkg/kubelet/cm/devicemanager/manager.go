@@ -156,8 +156,8 @@ func (m *ManagerImpl) GetTopologyHints(pod v1.Pod, container v1.Container) topol
         deviceTriggered := false
         for _, list := range devices {
             for _, device := range list {
-                if device.Socket > largestSocket {
-                    largestSocket = device.Socket
+                if device.Topology.Socket > largestSocket {
+                    largestSocket = device.Topology.Socket
                 }
             }
         }
@@ -190,7 +190,7 @@ func (m *ManagerImpl) GetTopologyHints(pod v1.Pod, container v1.Container) topol
                 		for _, device := range devices[resource] {
                         		klog.Infof("[device-manager] AvailID: %v DeviceID: %v", availID, device)
                         		if availID == device.ID {
-                            			socket := device.Socket
+                            			socket := device.Topology.Socket
                        				device_socket_avail[socket] += 1
                         		}                            
                     		}
@@ -788,7 +788,7 @@ func (m *ManagerImpl) devicesToAllocate(podUID, contName, resource string, requi
         	for _, device := range allDevices[resource] {
             		klog.Infof("AvailID: %v DeviceID: %v", availID, device)
             		if availID == device.ID {
-                		if !sockets[int(device.Socket)] {
+                		if !sockets[int(device.Topology.Socket)] {
                     			delete(availableTopologyAligned, availID)
                 		}
                 	break

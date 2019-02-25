@@ -59,9 +59,9 @@ func newTestManager() *testManager {
 func (test *testManager) discoverTestResources() error {
  	test.devices = make(map[string]*pluginapi.Device)
  	glog.Infof("Discovered Devices below:")
- 	dev001 := pluginapi.Device{ID: "25102017", Health: pluginapi.Healthy, Socket: 0,}
- 	dev002 := pluginapi.Device{ID: "26102017", Health: pluginapi.Healthy, Socket: 1,}
-        dev003 := pluginapi.Device{ID: "27102017", Health: pluginapi.Healthy, Socket: 1,}
+ 	dev001 := pluginapi.Device{ID: "25102017", Health: pluginapi.Healthy, Topology: &pluginapi.TopologyInfo{Socket: 0,}}
+ 	dev002 := pluginapi.Device{ID: "26102017", Health: pluginapi.Healthy, Topology: &pluginapi.TopologyInfo{Socket: 1,}}
+        dev003 := pluginapi.Device{ID: "27102017", Health: pluginapi.Healthy,Topology: &pluginapi.TopologyInfo{Socket: 1,}}
  	test.devices["25102017"] = &dev001
  	test.devices["26102017"] = &dev002
         test.devices["27102017"] = &dev003
@@ -170,7 +170,7 @@ func (test *testManager) ListAndWatch(empty *pluginapi.Empty, stream pluginapi.D
 		if changed {
 			resp := new(pluginapi.ListAndWatchResponse)
 			for _, dev := range test.devices {
-				resp.Devices = append(resp.Devices, &pluginapi.Device{ID: dev.ID, Health: dev.Health, Socket: dev.Socket})
+				resp.Devices = append(resp.Devices, &pluginapi.Device{ID: dev.ID, Health: dev.Health, Topology: &pluginapi.TopologyInfo{Socket: dev.Topology.Socket}})
 			}
 			glog.Infof("ListAndWatch: send devices %v\n", resp)
 			if err := stream.Send(resp); err != nil {
@@ -212,7 +212,7 @@ func (test *testManager) Allocate(ctx context.Context, rqt *pluginapi.AllocateRe
 				glog.Errorf("Error. Invalid allocation request with unhealthy device %s", id)
 				return nil, fmt.Errorf("Error. Invalid allocation request with unhealthy device %s", id)
 			}
-			ids = ids + "{" + id + ", " + strconv.Itoa(int(dev.Socket)) + "}"
+			ids = ids + "{" + id + ", " + strconv.Itoa(int(dev.Topology.Socket)) + "}"
 		}
 		envmap := make(map[string]string)
 		envmap[resourceName] = ids
