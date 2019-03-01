@@ -37,7 +37,6 @@ type endpoint interface {
 	stop()
 	allocate(devs []string) (*pluginapi.AllocateResponse, error)
 	preStartContainer(devs []string) (*pluginapi.PreStartContainerResponse, error)
-	getDevices(resourceName string) []pluginapi.Device
 	callback(resourceName string, devices []pluginapi.Device)
 	isStopped() bool
 	stopGracePeriodExpired() bool
@@ -51,7 +50,6 @@ type endpointImpl struct {
 	resourceName string
 	stopTime     time.Time
 
-	devices map[string][]pluginapi.Device
 	mutex sync.Mutex
 	cb    monitorCallback
 }
@@ -60,7 +58,6 @@ type endpointImpl struct {
 // This is to be used during normal device plugin registration.
 func newEndpointImpl(socketPath, resourceName string, callback monitorCallback) (*endpointImpl, error) {
 	client, c, err := dial(socketPath)
-	devices := make(map[string][]pluginapi.Device)
 	if err != nil {
 		klog.Errorf("Can't create new endpoint with path %s err %v", socketPath, err)
 		return nil, err
@@ -72,8 +69,7 @@ func newEndpointImpl(socketPath, resourceName string, callback monitorCallback) 
 
 		socketPath:   socketPath,
 		resourceName: resourceName,
-		devices:      devices,
-		cb: callback,
+	    cb: callback,
 	}, nil
 }
 
@@ -88,14 +84,6 @@ func newStoppedEndpointImpl(resourceName string) *endpointImpl {
 
 func (e *endpointImpl) callback(resourceName string, devices []pluginapi.Device) {
 	e.cb(resourceName, devices)
-}
-
-func (e *endpointImpl) getDevices(resourceName string) []pluginapi.Device {
-	e.mutex.Lock()
-	defer e.mutex.Unlock()
-	var devs []pluginapi.Device
-	devs = e.devices[resourceName]
-	return devs
 }
 
 // run initializes ListAndWatch gRPC call for the device plugin and
@@ -122,12 +110,9 @@ func (e *endpointImpl) run() {
 		klog.V(2).Infof("State pushed for device plugin %s", e.resourceName)
 
 		var newDevs []pluginapi.Device
-		devMap := make(map[string][]pluginapi.Device)
 		for _, d := range devs {
 			newDevs = append(newDevs, *d)
-			devMap[e.resourceName] = append(devMap[e.resourceName], *d)
 		}
-		e.devices = devMap	
 		e.callback(e.resourceName, newDevs)
 	}
 }
