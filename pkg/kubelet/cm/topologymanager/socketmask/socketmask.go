@@ -76,20 +76,34 @@ func buildMaskHolder(mask [][]int64) []string {
 }
 
 func getTopologyAffinity(arrangedMask, maskHolder []string) []string {
-        var topologyTemp []string
-        for i := 0; i < len(maskHolder); i++ {
+        var topologyTemp []string	
+        checkflag := false
+	for _, n := range maskHolder {
+                if strings.Contains(n, "0") || len(maskHolder) != len(arrangedMask) {
+			checkflag = true
+			break
+		}
+	}
+	for i := 0; i < len(maskHolder); i++ {
                 for j := 0; j < len(arrangedMask); j++ {
                         tempStr := andOperation(maskHolder[i],arrangedMask[j])
-                        if strings.Contains(tempStr, "1") {
-                                topologyTemp = append(topologyTemp, tempStr )
-                        }
+			existsInArranged := checkMaskForString(arrangedMask, tempStr)
+			existsInHolder := checkMaskForString(maskHolder, tempStr)
+			if checkflag {
+				if existsInArranged && existsInHolder {
+					topologyTemp = append(topologyTemp, tempStr)
+				}
+                        } else {
+				if existsInArranged {
+					topologyTemp = append(topologyTemp, tempStr)
+				}
+			}
                 }
         }
         duplicates := map[string]bool{}
         for v:= range topologyTemp {
                 duplicates[topologyTemp[v]] = true
         }
-        // Place all keys from the map into a slice.
         topologyResult := []string{}
         for key, _ := range duplicates {
                 topologyResult = append(topologyResult, key)
@@ -166,3 +180,11 @@ func andOperation(val1, val2 string) (string) {
         return string(byteArr[:])
 }
 
+func checkMaskForString(mask []string, socket string) bool {
+	for _, n := range mask {
+		if socket == n {
+			return true
+		}
+	}
+	return false
+}
