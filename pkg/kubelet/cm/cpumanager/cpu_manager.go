@@ -68,7 +68,7 @@ type Manager interface {
         
        // Manager HintProvider provider indicates the Device Manager implements the Topology Manager Interface
        // and is consulted to make Topology aware resource alignments
-       GetTopologyHints(pod v1.Pod, container v1.Container) topologymanager.TopologyHints
+       GetTopologyHints(pod v1.Pod, container v1.Container) ([]topologymanager.TopologyHint, bool)
 }
 
 type manager struct {
@@ -156,9 +156,9 @@ func NewManager(cpuPolicyName string, reconcilePeriod time.Duration, machineInfo
 	return manager, nil
 }
 
-func (m *manager) GetTopologyHints(pod v1.Pod, container v1.Container) topologymanager.TopologyHints {
+func (m *manager) GetTopologyHints(pod v1.Pod, container v1.Container) ([]topologymanager.TopologyHint, bool) {
 	//For testing purposes - manager should consult available resources and make topology mask based on container request 
-    	var cpuSocketMask []socketmask.SocketMask	
+    	var cpuHints []topologymanager.TopologyHint
     	for resourceObj, amountObj := range container.Resources.Requests {
         	resource := string(resourceObj)
         	amount := int(amountObj.Value())
@@ -235,22 +235,16 @@ func (m *manager) GetTopologyHints(pod v1.Pod, container v1.Container) topologym
                     	divided = append(divided, arr)
                 }
             
-            	klog.Infof("[cpumanager] Guaranteed CPUs detected: %v", amount)
-
             	klog.Infof("[cpumanager] Topology Affinities for pod (divided array): %v", divided)
         	klog.Infof("[cpumanager] Number of Assignable CPUs per Socket: %v", CPUsInSocketSize)	
-        	klog.Infof("[cpumanager] Topology Affinities for pod (divided array): %v", divided)	
-        
-       
+        	cpuHintsTemp := make([]topologymanager.TopologyHint, len(divided))
         	for r := range divided {
             		cpuSocket := socketmask.SocketMask(divided[r])
-            		cpuSocketMask = append(cpuSocketMask, cpuSocket)
+           		cpuHintsTemp[r].SocketMask = cpuSocket
         	}    
+		cpuHints = cpuHintsTemp
     	}  
-    	return topologymanager.TopologyHints{ 
-        	SocketAffinity: cpuSocketMask,
-        	Affinity: true,
-    	}
+	return cpuHints, true
 }
 
 func (m *manager) Start(activePods ActivePodsFunc, podStatusProvider status.PodStatusProvider, containerRuntime runtimeService) {

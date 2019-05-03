@@ -18,5 +18,5 @@ import (
 
 type Policy interface {
     Name() string
-    CanAdmitPodResult (result TopologyHints) lifecycle.PodAdmitResult 
+    CanAdmitPodResult (admit bool) lifecycle.PodAdmitResult 
 }

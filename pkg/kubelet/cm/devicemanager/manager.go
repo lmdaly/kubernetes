@@ -146,7 +146,7 @@ func newManagerImpl(socketPath string, topologyAffinityStore topologymanager.Sto
 
 	return manager, nil
 }
-    	
+
 func (m *ManagerImpl) genericDeviceUpdateCallback(resourceName string, devices []pluginapi.Device) {
 	m.mutex.Lock()
 	m.healthyDevices[resourceName] = sets.NewString()
@@ -627,12 +627,12 @@ func (m *ManagerImpl) devicesToAllocate(podUID, contName, resource string, requi
 	}
     
     	//Get Topology Mask for pod/container here, check available against devices to get devices that have the same socket and update available to these
-    	podTopologyAffinity := m.topologyAffinityStore.GetAffinity(podUID, contName)
-    	klog.Infof("Topology Affinities for pod %v container %v are: %v", podUID, contName, podTopologyAffinity)
+    	podTopology := m.topologyAffinityStore.GetAffinity(podUID, contName)
+    	klog.Infof("Topology Affinities for pod %v container %v are: %v", podUID, contName, podTopology)
     
     	sockets := make(map[int]bool)
-    	for _, bitMasks := range podTopologyAffinity.SocketAffinity {
-       		for counter, bit := range bitMasks {
+    	for _, hint  := range podTopology {
+       		for counter, bit := range hint.SocketMask {
                 	if bit == int64(1) {
                         	sockets[counter] = true
                 	}

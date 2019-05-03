@@ -70,8 +70,8 @@ func (h *ManagerStub) GetWatcherHandler() pluginwatcher.PluginHandler {
 	return nil
 }
 
-func (h *ManagerStub) GetTopologyHints(pod v1.Pod, container v1.Container) topologymanager.TopologyHints {
-       return topologymanager.TopologyHints{}
+func (h *ManagerStub) GetTopologyHints(pod v1.Pod, container v1.Container) ([]topologymanager.TopologyHint, bool) {
+       return []topologymanager.TopologyHint{}, false
 }
 
 // GetDevices returns nil
