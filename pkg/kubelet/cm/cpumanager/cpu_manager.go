@@ -32,7 +32,6 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/cm/cpuset"
 	kubecontainer "k8s.io/kubernetes/pkg/kubelet/container"
 	"k8s.io/kubernetes/pkg/kubelet/cm/topologymanager"
-	"k8s.io/kubernetes/pkg/kubelet/cm/topologymanager/socketmask"
 	"k8s.io/kubernetes/pkg/kubelet/status"
 )
 
@@ -154,97 +153,6 @@ func NewManager(cpuPolicyName string, reconcilePeriod time.Duration, machineInfo
 		nodeAllocatableReservation: nodeAllocatableReservation,
 	}
 	return manager, nil
-}
-
-func (m *manager) GetTopologyHints(pod v1.Pod, container v1.Container) ([]topologymanager.TopologyHint, bool) {
-	//For testing purposes - manager should consult available resources and make topology mask based on container request 
-    	var cpuHints []topologymanager.TopologyHint
-    	for resourceObj, amountObj := range container.Resources.Requests {
-        	resource := string(resourceObj)
-        	amount := int(amountObj.Value())
-        	amount64 := int64(amount)
-        	// Check string "cpu" here
-        	if resource != "cpu" {
-                	continue
-            	}
-        
-        	klog.Infof("[cpumanager] Guaranteed CPUs detected: %v", amount)
-
-        	// Discover machine topology
-            	topo, err := topology.Discover(m.machineInfo)
-            	if err != nil {
-                    klog.Infof("[cpu manager] error discovering topology")
-            	}
-        
-        	// Get no. of shared CPUs
-        	allCPUs := topo.CPUDetails.CPUs()
-        	klog.Infof("[cpumanager] Shared CPUs: %v", allCPUs)        
-        
-        	// Get Reserved CPUs
-        	reservedCPUs := m.nodeAllocatableReservation[v1.ResourceCPU]	
-        	reservedCPUsFloat := float64(reservedCPUs.MilliValue()) / 1000
-        	numReservedCPUs := int(math.Ceil(reservedCPUsFloat))        	
-        	reserved, _ := takeByTopology(topo, allCPUs, numReservedCPUs)
-        	klog.Infof("[cpumanager] Reserved CPUs: %v", reserved)
-                
-        	//Get Assignable CPUs (Shared - Reserved)
-        	assignableCPUs := m.state.GetDefaultCPUSet().Difference(reserved)
-        	klog.Infof("[cpumanager] Assignable CPUs (Shared - Reserved): %v", assignableCPUs)
-
-        	// New CPUAccumulator
-        	cpuAccum := newCPUAccumulator(topo, assignableCPUs, amount)     
-
-            	// Get total number of sockets on machine 
-            	socketCount := topo.NumSockets
-            	klog.Infof("[cpumanager] Number of sockets on machine (available and unavailable): %v", socketCount)
-
-        	// Check for empty CPUs
-        	freeCPUs := cpuAccum.freeCPUs()
-        	klog.Infof("[cpumanager] Assignable CPUs (all Sockets): %v", freeCPUs)	
-
-        	// Get Number of free CPUs per Socket
-        	CPUsInSocketSize := make([]int64, socketCount)
-        	var arr []int64
-        	var sum int64 = 0
-        	var divided [][]int64
-        	for i := 0; i < socketCount; i++ {
-            		CPUsInSocket := cpuAccum.details.CPUsInSocket(i)
-            		klog.Infof("[cpumanager] Assignable CPUs on Socket %v: %v", i, CPUsInSocket)
-            		CPUsInSocketSize[i] = int64(CPUsInSocket.Size())
-            		sum += CPUsInSocketSize[i]
-            		if CPUsInSocketSize[i] >= amount64 {
-                		for j := 0; j < socketCount; j++ {
-                            		if j == i {
-                                    		arr = append(arr, 1)
-                            		} else {
-                                    		arr = append(arr, 0)
-                            		}
-                        	}
-                        	divided = append(divided, arr)
-                        	arr = nil
-            		}						
-        	}
-        	if sum >= amount64 {
-                    	for i := 0; i < socketCount; i++ {
-                        	    	if CPUsInSocketSize[i] == 0 {
-                                    		arr = append(arr, 0)
-                            	    	} else {
-                                    		arr = append(arr, 1)
-                            		}
-                    	}
-                    	divided = append(divided, arr)
-                }
-            
-            	klog.Infof("[cpumanager] Topology Affinities for pod (divided array): %v", divided)
-        	klog.Infof("[cpumanager] Number of Assignable CPUs per Socket: %v", CPUsInSocketSize)	
-        	cpuHintsTemp := make([]topologymanager.TopologyHint, len(divided))
-        	for r := range divided {
-            		cpuSocket := socketmask.SocketMask(divided[r])
-           		cpuHintsTemp[r].SocketMask = cpuSocket
-        	}    
-		cpuHints = cpuHintsTemp
-    	}  
-	return cpuHints, true
 }
 
 func (m *manager) Start(activePods ActivePodsFunc, podStatusProvider status.PodStatusProvider, containerRuntime runtimeService) {
