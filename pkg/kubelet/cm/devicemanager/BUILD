@@ -42,12 +42,15 @@ go_test(
     srcs = [
         "endpoint_test.go",
         "manager_test.go",
+        "topology_test.go",
     ],
     embed = [":go_default_library"],
     deps = [
         "//pkg/kubelet/apis/deviceplugin/v1beta1:go_default_library",
         "//pkg/kubelet/apis/pluginregistration/v1:go_default_library",
         "//pkg/kubelet/checkpointmanager:go_default_library",
+        "//pkg/kubelet/cm/topologymanager:go_default_library",
+        "//pkg/kubelet/cm/topologymanager/socketmask:go_default_library",
         "//pkg/kubelet/lifecycle:go_default_library",
         "//pkg/kubelet/util/pluginwatcher:go_default_library",
         "//pkg/scheduler/nodeinfo:go_default_library",
