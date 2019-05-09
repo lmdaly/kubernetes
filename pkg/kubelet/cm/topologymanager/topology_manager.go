@@ -18,10 +18,7 @@ package topologymanager
 
 import (
 	"k8s.io/api/core/v1"
-<<<<<<< HEAD
-=======
 	"k8s.io/klog"
->>>>>>> Add Topology Manager Implementations based on Interfaces
 	"k8s.io/kubernetes/pkg/kubelet/cm/topologymanager/socketmask"
 	"k8s.io/kubernetes/pkg/kubelet/lifecycle"
 )
@@ -34,24 +31,13 @@ type Manager interface {
 	//wants to be consoluted when making topology hints
 	AddHintProvider(HintProvider)
 	//Adds pod to Manager for tracking
-<<<<<<< HEAD
 	AddContainer(pod *v1.Pod, containerID string) error
 	//Removes pod from Manager tracking
 	RemoveContainer(containerID string) error
-=======
-	AddPod(pod *v1.Pod, containerID string) error
-	//Removes pod from Manager tracking
-	RemovePod(containerID string) error
->>>>>>> Add Topology Manager Implementations based on Interfaces
 	//Interface for storing pod topology hints
 	Store
 }
 
-<<<<<<< HEAD
-//HintProvider interface is to be implemented by Hint Providers
-type HintProvider interface {
-	GetTopologyHints(pod v1.Pod, container v1.Container) ([]TopologyHint, bool)
-=======
 //TopologyHints is a struct containing Sokcet Affinity for a Pod
 //and whether Affinity is true or false
 type TopologyHints struct {
@@ -72,19 +58,10 @@ type manager struct {
 //HintProvider interface is to be implemented by Hint Providers
 type HintProvider interface {
 	GetTopologyHints(pod v1.Pod, container v1.Container) TopologyHints
->>>>>>> Add Topology Manager Implementations based on Interfaces
 }
 
 //Store interface is to allow Hint Providers to retrieve pod affinity
 type Store interface {
-<<<<<<< HEAD
-	GetAffinity(podUID string, containerName string) TopologyHint
-}
-
-// TopologyHint is a struct containing Socket Mask for a Pod
-type TopologyHint struct {
-	SocketAffinity socketmask.SocketMask
-=======
 	GetAffinity(podUID string, containerName string) TopologyHints
 }
 
@@ -163,16 +140,16 @@ func (m *manager) AddHintProvider(h HintProvider) {
 	m.hintProviders = append(m.hintProviders, h)
 }
 
-func (m *manager) AddPod(pod *v1.Pod, containerID string) error {
+func (m *manager) AddContainer(pod *v1.Pod, containerID string) error {
 	m.podMap[containerID] = string(pod.UID)
 	return nil
 }
 
-func (m *manager) RemovePod(containerID string) error {
+func (m *manager) RemoveContainer(containerID string) error {
 	podUIDString := m.podMap[containerID]
 	delete(m.podTopologyHints, podUIDString)
 	delete(m.podMap, containerID)
-	klog.Infof("[topologymanager] RemovePod - Container ID: %v podTopologyHints: %v", containerID, m.podTopologyHints)
+	klog.Infof("[topologymanager] RemoveContainer - Container ID: %v podTopologyHints: %v", containerID, m.podTopologyHints)
 	return nil
 }
 
