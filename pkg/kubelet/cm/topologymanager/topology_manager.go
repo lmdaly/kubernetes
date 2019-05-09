@@ -31,9 +31,9 @@ type Manager interface {
 	//wants to be consoluted when making topology hints
 	AddHintProvider(HintProvider)
 	//Adds pod to Manager for tracking
-	AddPod(pod *v1.Pod, containerID string) error
+	AddContainer(pod *v1.Pod, containerID string) error
 	//Removes pod from Manager tracking
-	RemovePod(containerID string) error
+	RemoveContainer(containerID string) error
 	//Interface for storing pod topology hints
 	Store
 }
@@ -140,16 +140,16 @@ func (m *manager) AddHintProvider(h HintProvider) {
 	m.hintProviders = append(m.hintProviders, h)
 }
 
-func (m *manager) AddPod(pod *v1.Pod, containerID string) error {
+func (m *manager) AddContainer(pod *v1.Pod, containerID string) error {
 	m.podMap[containerID] = string(pod.UID)
 	return nil
 }
 
-func (m *manager) RemovePod(containerID string) error {
+func (m *manager) RemoveContainer(containerID string) error {
 	podUIDString := m.podMap[containerID]
 	delete(m.podTopologyHints, podUIDString)
 	delete(m.podMap, containerID)
-	klog.Infof("[topologymanager] RemovePod - Container ID: %v podTopologyHints: %v", containerID, m.podTopologyHints)
+	klog.Infof("[topologymanager] RemoveContainer - Container ID: %v podTopologyHints: %v", containerID, m.podTopologyHints)
 	return nil
 }
 
