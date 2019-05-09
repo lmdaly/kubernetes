@@ -631,12 +631,10 @@ func (m *ManagerImpl) devicesToAllocate(podUID, contName, resource string, requi
     	klog.Infof("Topology Affinities for pod %v container %v are: %v", podUID, contName, podTopology)
     
     	sockets := make(map[int]bool)
-    	for _, hint  := range podTopology {
-       		for counter, bit := range hint.SocketMask {
-                	if bit == int64(1) {
-                        	sockets[counter] = true
-                	}
-            	}
+       	for counter, bit := range podTopology.SocketMask {
+               	if bit == int64(1) {
+                       	sockets[counter] = true
+               	}
         }
 
         allocated := available.UnsortedList()[:needed]

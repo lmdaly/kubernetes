@@ -46,11 +46,11 @@ type HintProvider interface {
 }
  
 type Store interface {
-	GetAffinity(podUID string, containerName string) []TopologyHint 
+	GetAffinity(podUID string, containerName string) TopologyHint 
 }
 
  
-type containers map[string][]TopologyHint
+type containers map[string]TopologyHint
 var _ Manager = &manager{}
 type policyName string
 func NewManager(topologyPolicyName string) Manager {
@@ -83,11 +83,11 @@ func NewManager(topologyPolicyName string) Manager {
 	return manager
 }
 
-func (m *manager) GetAffinity(podUID string, containerName string) []TopologyHint {
+func (m *manager) GetAffinity(podUID string, containerName string) TopologyHint {
  	return m.podTopologyHints[podUID][containerName]
 }
 
-func (m *manager) calculateTopologyAffinity(pod v1.Pod, container v1.Container) ([]TopologyHint, bool) {
+func (m *manager) calculateTopologyAffinity(pod v1.Pod, container v1.Container) (TopologyHint, bool) {
 	socketMask := socketmask.NewSocketMask(nil)
 	var maskHolder []string
 	var socketMaskInt64 [][]int64
@@ -114,12 +114,10 @@ func (m *manager) calculateTopologyAffinity(pod v1.Pod, container v1.Container) 
 		}
 		
 	}
-	var topologyHints []TopologyHint
 	var topologyHint TopologyHint
 	topologyHint.SocketMask = socketMask 
-	topologyHints = append(topologyHints, topologyHint) 	  
 
-	return topologyHints, admitPod
+	return topologyHint, admitPod
 }
 
 func (m *manager) AddHintProvider(h HintProvider) {
