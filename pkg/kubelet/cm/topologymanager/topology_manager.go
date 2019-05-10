@@ -141,7 +141,7 @@ func (m *manager) Admit(attrs *lifecycle.PodAdmitAttributes) lifecycle.PodAdmitR
 	qosClass := pod.Status.QOSClass
 	
 	if qosClass == "Guaranteed" {
-		for _, container := range pod.Spec.Containers {
+		for _, container := range append(pod.Spec.InitContainers, pod.Spec.Containers...) {
 			result := m.calculateTopologyAffinity(*pod, container)
 			admitPod := m.policy.CanAdmitPodResult(result)
             		if admitPod.Admit == false {
