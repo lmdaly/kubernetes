@@ -39,7 +39,7 @@ func TestFakeGetAffinity(t *testing.T) {
 		name          string
 		containerName string
 		podUID        string
-		expected      TopologyHints
+		expected      TopologyHint
 	}{
 		{
 			name:          "Case1",

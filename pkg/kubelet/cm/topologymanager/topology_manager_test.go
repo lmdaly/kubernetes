@@ -17,13 +17,12 @@ limitations under the License.
 package topologymanager
 
 import (
-	"reflect"
-	"testing"
-
 	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/kubernetes/pkg/kubelet/cm/topologymanager/socketmask"
 	"k8s.io/kubernetes/pkg/kubelet/lifecycle"
+	"reflect"
+	"testing"
 )
 
 func TestNewManager(t *testing.T) {
@@ -55,11 +54,12 @@ func TestNewManager(t *testing.T) {
 }
 
 type mockHintProvider struct {
-	th TopologyHints
+	th    []TopologyHint
+	admit bool
 }
 
-func (m *mockHintProvider) GetTopologyHints(pod v1.Pod, container v1.Container) TopologyHints {
-	return m.th
+func (m *mockHintProvider) GetTopologyHints(pod v1.Pod, container v1.Container) ([]TopologyHint, bool) {
+	return m.th, m.admit
 }
 
 func TestGetAffinity(t *testing.T) {
@@ -67,13 +67,13 @@ func TestGetAffinity(t *testing.T) {
 		name          string
 		containerName string
 		podUID        string
-		expected      TopologyHints
+		expected      TopologyHint
 	}{
 		{
 			name:          "case1",
 			containerName: "nginx",
 			podUID:        "0aafa4c4-38e8-11e9-bcb1-a4bf01040474",
-			expected:      TopologyHints{},
+			expected:      TopologyHint{},
 		},
 	}
 	for _, tc := range tcases {
@@ -87,71 +87,90 @@ func TestGetAffinity(t *testing.T) {
 
 func TestCalculateTopologyAffinity(t *testing.T) {
 	tcases := []struct {
-		name     string
-		hp       []HintProvider
-		expected TopologyHints
+		name          string
+		hp            []HintProvider
+		expectedHint  TopologyHint
+		expectedAdmit bool
 	}{
 		{
-			name: "TopologyHints not set",
+			name: "TopologyHint not set",
 			hp:   []HintProvider{},
-			expected: TopologyHints{
-				Affinity:       true,
-				SocketAffinity: nil,
+			expectedHint: TopologyHint{
+				SocketMask: nil,
 			},
+			expectedAdmit: true,
 		},
 		{
-			name: "TopologyHints set with Affinity as true and SocketAffinity as nil",
+			name: "TopologyHint set with SocketMask as nil. Admit set as false",
 			hp: []HintProvider{
 				&mockHintProvider{
-					TopologyHints{
-						Affinity:       true,
-						SocketAffinity: nil,
+					th: []TopologyHint{
+						TopologyHint{
+							SocketMask: nil,
+						},
 					},
+					admit: false,
 				},
 			},
-			expected: TopologyHints{
-				Affinity:       false,
-				SocketAffinity: nil,
+			expectedHint: TopologyHint{
+				SocketMask: nil,
 			},
+			expectedAdmit: false,
 		},
 		{
-			name: "TopologyHints set with Affinity as false and SocketAffinity as not nil",
+			name: "TopologyHint set with SocketMask as not nil. Admit set as false",
 			hp: []HintProvider{
 				&mockHintProvider{
-					TopologyHints{
-						Affinity:       false,
-						SocketAffinity: []socketmask.SocketMask{{1, 0}, {0, 1}, {1, 1}},
+					th: []TopologyHint{
+						TopologyHint{
+							SocketMask: socketmask.SocketMask{1, 0},
+						},
+						TopologyHint{
+							SocketMask: socketmask.SocketMask{0, 1},
+						},
+						TopologyHint{
+							SocketMask: socketmask.SocketMask{1, 1},
+						},
 					},
+					admit: false,
 				},
 			},
-			expected: TopologyHints{
-				Affinity:       false,
-				SocketAffinity: []socketmask.SocketMask{{1, 0}, {0, 1}, {1, 1}},
+			expectedHint: TopologyHint{
+				SocketMask: socketmask.SocketMask{1, 0},
 			},
+			expectedAdmit: false,
 		},
 		{
-			name: "TopologyHints set with Affinity as true and SocketAffinity as not nil",
+			name: "TopologyHint with SocketMask as not nil. Admit set as true",
 			hp: []HintProvider{
 				&mockHintProvider{
-					TopologyHints{
-						Affinity:       true,
-						SocketAffinity: []socketmask.SocketMask{{1, 0}, {0, 1}, {1, 1}},
+					th: []TopologyHint{
+						TopologyHint{
+							SocketMask: socketmask.SocketMask{1, 0},
+						},
+						TopologyHint{
+							SocketMask: socketmask.SocketMask{0, 1},
+						},
+						TopologyHint{
+							SocketMask: socketmask.SocketMask{1, 1},
+						},
 					},
+					admit: true,
 				},
 			},
-			expected: TopologyHints{
-				Affinity:       true,
-				SocketAffinity: []socketmask.SocketMask{{1, 0}, {0, 1}, {1, 1}},
+			expectedHint: TopologyHint{
+				SocketMask: socketmask.SocketMask{1, 0},
 			},
+			expectedAdmit: true,
 		},
 	}
 
 	for _, tc := range tcases {
 		mngr := manager{}
 		mngr.hintProviders = tc.hp
-		actual := mngr.calculateTopologyAffinity(v1.Pod{}, v1.Container{})
-		if !reflect.DeepEqual(actual.Affinity, tc.expected.Affinity) {
-			t.Errorf("Expected Affinity in result to be %v, got %v", tc.expected.Affinity, actual.Affinity)
+		_, admit := mngr.calculateTopologyAffinity(v1.Pod{}, v1.Container{})
+		if !reflect.DeepEqual(admit, tc.expectedAdmit) {
+			t.Errorf("Expected Affinity in result to be %v, got %v", tc.expectedAdmit, admit)
 		}
 	}
 }
@@ -236,10 +255,12 @@ func TestAddHintProvider(t *testing.T) {
 			name: "Add HintProvider",
 			hp: []HintProvider{
 				&mockHintProvider{
-					TopologyHints{
-						Affinity:       true,
-						SocketAffinity: nil,
+					th: []TopologyHint{
+						TopologyHint{
+							SocketMask: nil,
+						},
 					},
+					admit: true,
 				},
 			},
 		},
