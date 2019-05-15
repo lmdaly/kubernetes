@@ -90,10 +90,10 @@ func (m *manager) GetAffinity(podUID string, containerName string) TopologyHint 
 func (m *manager) calculateTopologyAffinity(pod v1.Pod, container v1.Container) (TopologyHint, bool) {
 	socketMask := socketmask.NewSocketMask(nil)
 	var maskHolder []string
-	var socketMaskInt64 [][]int64
 	count := 0 
 	admitPod := true
         for _, hp := range m.hintProviders {
+		var socketMaskInt64 [][]int64
 		topologyHints, admit := hp.GetTopologyHints(pod, container)
 		for r := range topologyHints {
                 	socketMaskVals := []int64(topologyHints[r].SocketMask)
