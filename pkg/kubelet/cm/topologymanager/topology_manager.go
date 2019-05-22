@@ -21,14 +21,13 @@ import (
 type Manager interface {
  	lifecycle.PodAdmitHandler
  	AddHintProvider(HintProvider)
-	AddPod(pod *v1.Pod, containerID string) error 
- 	RemovePod(containerID string) error 
+	AddContainer(pod *v1.Pod, containerID string) error 
+ 	RemoveContainer(containerID string) error 
  	Store
  }
 
-type TopologyHints struct {
-	SocketAffinity []socketmask.SocketMask
-	Affinity bool
+type TopologyHint struct {
+	SocketMask socketmask.SocketMask
 }
  
 type manager struct {
@@ -43,15 +42,15 @@ type manager struct {
  
 //Interface to be implemented by Topology Allocators 
 type HintProvider interface {
-    	GetTopologyHints(pod v1.Pod, container v1.Container) TopologyHints
+    	GetTopologyHints(pod v1.Pod, container v1.Container) ([]TopologyHint, bool)
 }
  
 type Store interface {
-	GetAffinity(podUID string, containerName string) TopologyHints
+	GetAffinity(podUID string, containerName string) TopologyHint 
 }
 
  
-type containers map[string]TopologyHints
+type containers map[string]TopologyHint
 var _ Manager = &manager{}
 type policyName string
 func NewManager(topologyPolicyName string) Manager {
@@ -84,51 +83,57 @@ func NewManager(topologyPolicyName string) Manager {
 	return manager
 }
 
-func (m *manager) GetAffinity(podUID string, containerName string) TopologyHints {
+func (m *manager) GetAffinity(podUID string, containerName string) TopologyHint {
  	return m.podTopologyHints[podUID][containerName]
 }
 
-func (m *manager) calculateTopologyAffinity(pod v1.Pod, container v1.Container) TopologyHints {
+func (m *manager) calculateTopologyAffinity(pod v1.Pod, container v1.Container) (TopologyHint, bool) {
 	socketMask := socketmask.NewSocketMask(nil)
 	var maskHolder []string
 	count := 0 
-	affinity := true
+	admitPod := true
         for _, hp := range m.hintProviders {
-		topologyHints := hp.GetTopologyHints(pod, container)
-        if !topologyHints.Affinity && topologyHints.SocketAffinity == nil {
-            klog.Infof("[topologymanager] Hint Provider does not care about this container")
-            continue
-        }
-		if topologyHints.Affinity && topologyHints.SocketAffinity  != nil {
-			socketMask, maskHolder = socketMask.GetSocketMask(topologyHints.SocketAffinity, maskHolder, count)
+		var socketMaskInt64 [][]int64
+		topologyHints, admit := hp.GetTopologyHints(pod, container)
+		for r := range topologyHints {
+                	socketMaskVals := []int64(topologyHints[r].SocketMask)
+                        socketMaskInt64 = append(socketMaskInt64,socketMaskVals)
+                }      	
+	        if !admit && topologyHints == nil {
+            		klog.Infof("[topologymanager] Hint Provider does not care about this container")
+            		continue
+        	}
+		if admit && topologyHints != nil {
+			socketMask, maskHolder = socketMask.GetSocketMask(socketMaskInt64, maskHolder, count)
 			count++
-		} else if !topologyHints.Affinity && topologyHints.SocketAffinity  != nil {
+		} else if !admit && topologyHints != nil {
 			klog.Infof("[topologymanager] Cross Socket Topology Affinity")
-			affinity = false
-			socketMask, maskHolder = socketMask.GetSocketMask(topologyHints.SocketAffinity, maskHolder, count)
+			admitPod = false
+			socketMask, maskHolder = socketMask.GetSocketMask(socketMaskInt64, maskHolder, count)
 			count++
 		}
+		
 	}
-	return TopologyHints {
-		SocketAffinity: []socketmask.SocketMask{socketMask},
-		Affinity:	affinity,
-	}      
+	var topologyHint TopologyHint
+	topologyHint.SocketMask = socketMask 
+
+	return topologyHint, admitPod
 }
 
 func (m *manager) AddHintProvider(h HintProvider) {
  	m.hintProviders = append(m.hintProviders, h)
 }
 
-func (m *manager) AddPod(pod *v1.Pod, containerID string) error {
+func (m *manager) AddContainer(pod *v1.Pod, containerID string) error {
 	m.podMap[containerID] = string(pod.UID)
 	return nil
 }
 
-func (m *manager) RemovePod (containerID string) error {
+func (m *manager) RemoveContainer (containerID string) error {
  	podUIDString := m.podMap[containerID]
 	delete(m.podTopologyHints, podUIDString)
 	delete(m.podMap, containerID)
-	klog.Infof("[topologymanager] RemovePod - Container ID: %v podTopologyHints: %v", containerID, m.podTopologyHints)
+	klog.Infof("[topologymanager] RemoveContainer - Container ID: %v podTopologyHints: %v", containerID, m.podTopologyHints)
 	return nil 
 }
 
@@ -142,8 +147,8 @@ func (m *manager) Admit(attrs *lifecycle.PodAdmitAttributes) lifecycle.PodAdmitR
 	
 	if qosClass == "Guaranteed" {
 		for _, container := range append(pod.Spec.InitContainers, pod.Spec.Containers...) {
-			result := m.calculateTopologyAffinity(*pod, container)
-			admitPod := m.policy.CanAdmitPodResult(result)
+			result, admit := m.calculateTopologyAffinity(*pod, container)
+			admitPod := m.policy.CanAdmitPodResult(admit)
             		if admitPod.Admit == false {
                 		return admitPod
             		}

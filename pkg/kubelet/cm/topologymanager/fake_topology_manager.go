@@ -24,22 +24,22 @@ func NewFakeManager() Manager {
  	return &fakeManager{}
 }
 
-func (m *fakeManager) GetAffinity(podUID string, containerName string) TopologyHints {
+func (m *fakeManager) GetAffinity(podUID string, containerName string) TopologyHint {
 	klog.Infof("[fake topologymanager] GetAffinity podUID: %v container name:  %v", podUID, containerName)
- 	return TopologyHints{}
+	return TopologyHint{}
 }
 
 func (m *fakeManager) AddHintProvider(h HintProvider) {
 	klog.Infof("[fake topologymanager] AddHintProvider HintProvider:  %v", h)
 }
 
-func (m *fakeManager) AddPod(pod *v1.Pod, containerID string) error {
-	klog.Infof("[fake topologymanager] AddPod  pod: %v container id:  %v", pod, containerID)
+func (m *fakeManager) AddContainer(pod *v1.Pod, containerID string) error {
+	klog.Infof("[fake topologymanager] AddContainer  pod: %v container id:  %v", pod, containerID)
 	return nil
 }
 
-func (m *fakeManager) RemovePod (containerID string) error {
-	klog.Infof("[fake topologymanager] RemovePod container id:  %v", containerID)
+func (m *fakeManager) RemoveContainer (containerID string) error {
+	klog.Infof("[fake topologymanager] RemoveContainer container id:  %v", containerID)
 	return nil 
 }
 
