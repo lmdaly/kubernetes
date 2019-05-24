@@ -88,36 +88,56 @@ func (m *manager) GetAffinity(podUID string, containerName string) TopologyHint 
 }
 
 func (m *manager) calculateTopologyAffinity(pod v1.Pod, container v1.Container) (TopologyHint, bool) {
-	socketMask := socketmask.NewSocketMask(nil)
-	var maskHolder []string
-	count := 0 
 	admitPod := true
+    firstHintProvider := true
+    var containerHints []TopologyHint
         for _, hp := range m.hintProviders {
-		var socketMaskInt64 [][]int64
-		topologyHints, admit := hp.GetTopologyHints(pod, container)
-		for r := range topologyHints {
-                	socketMaskVals := []int64(topologyHints[r].SocketMask)
-                        socketMaskInt64 = append(socketMaskInt64,socketMaskVals)
-                }      	
-	        if !admit && topologyHints == nil {
-            		klog.Infof("[topologymanager] Hint Provider does not care about this container")
-            		continue
-        	}
-		if admit && topologyHints != nil {
-			socketMask, maskHolder = socketMask.GetSocketMask(socketMaskInt64, maskHolder, count)
-			count++
-		} else if !admit && topologyHints != nil {
-			klog.Infof("[topologymanager] Cross Socket Topology Affinity")
-			admitPod = false
-			socketMask, maskHolder = socketMask.GetSocketMask(socketMaskInt64, maskHolder, count)
-			count++
-		}
+		topologyHints, admit := hp.GetTopologyHints(pod, container)	
+        if !admit && topologyHints == nil {
+                klog.Infof("[topologymanager] Hint Provider does not care about this container")
+                continue
+        }
+        var tempMask []TopologyHint
+        for _, hint := range topologyHints {
+            klog.Infof("Hint: %v", hint)
+            if(firstHintProvider){
+                tempMask = append(tempMask, hint)
+            } else {
+                for _, storedHint := range containerHints {
+                    if storedHint.SocketMask.IsEqual(hint.SocketMask) {
+                        klog.Infof("Masks equal")
+                        tempMask = append(tempMask, hint)
+                        break
+                    }
+                }
+            }
+        }
+        containerHints = tempMask
+        tempMask = nil
+        firstHintProvider = false
+        
+        klog.Infof("ContainerHints: %v", containerHints)
 		
 	}
-	var topologyHint TopologyHint
-	topologyHint.SocketMask = socketMask 
+    filledMask, _ := socketmask.NewSocketMask()
+    filledMask.Fill()
+    numBitsSet := filledMask.Count()
+    var containerTopologyHint TopologyHint
+    for _, hint := range containerHints {
+        if hint.SocketMask.Count() < numBitsSet {
+            numBitsSet = hint.SocketMask.Count()
+            containerTopologyHint = hint
+        }
+    }
+    
+    if containerTopologyHint.SocketMask.Count() > 1 {
+        klog.Infof("Cross Socket Affinity.")
+        admitPod = false;
+    }
+    
+    klog.Infof("[topologymanager] ContainerTopologyHint: %v AdmitPod: %v", containerTopologyHint, admitPod)
 
-	return topologyHint, admitPod
+	return containerTopologyHint, admitPod
 }
 
 func (m *manager) AddHintProvider(h HintProvider) {

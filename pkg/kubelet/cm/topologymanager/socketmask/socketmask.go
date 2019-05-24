@@ -17,168 +17,123 @@ limitations under the License.
 package socketmask
 
 import (
-	"strconv"
-        "strings"
-        "bytes"
-        "math"
-        "k8s.io/klog"
+    "fmt"
 )
 
-// SocketMask represents the NUMA affinity of a socket.
-type SocketMask []int64
-
-// NewSocketMask creates a new socket mask.
-func NewSocketMask(Mask []int64) SocketMask {
-	return SocketMask(Mask)
+type SocketMask interface {
+	Add(sockets ...int) error
+	Remove(sockets ...int) error
+	And(masks... SocketMask)
+	Or(masks... SocketMask)
+	Clear()
+	Fill()
+    IsEqual(mask SocketMask) bool
+	IsEmpty() bool
+	IsSet(socket int) bool
+    String() string
+    Count() int
+    GetSockets() []int
 }
 
-// GetSocketMask calculates the socket mask. 
-func (sm SocketMask) GetSocketMask(socketMaskInt64 [][]int64, maskHolder []string, count int) (SocketMask, []string) {
-       	if count == 0 {
-            	maskHolder = buildMaskHolder(socketMaskInt64)
+type socketMask uint64
+
+func NewSocketMask(sockets ...int) (SocketMask, error) {
+	s := socketMask(0)
+	err := (&s).Add(sockets...)
+	if err != nil {
+		return nil, err
 	}
-      	klog.V(4).Infof("[socketmask] MaskHolder : %v", maskHolder) 
-        arrangedMask := arrangeMask(socketMaskInt64)                   
-        newMask := getTopologyAffinity(arrangedMask, maskHolder)
-       	klog.V(4).Infof("[socketmask] New Mask after getTopologyAffinity (new mask) : %v ",newMask)
-        finalMaskValue := parseMask(newMask)
-       	klog.V(4).Infof("[socketmask] Mask []Int64 (finalMaskValue): %v", finalMaskValue)
-	maskHolder = newMask     
-        klog.V(4).Infof("[socketmask] New MaskHolder: %v", maskHolder)
-	return SocketMask(finalMaskValue), maskHolder
+	return &s, nil
 }
 
-func buildMaskHolder(mask [][]int64) []string {
-        outerLen := len(mask)
-        var innerLen int = 0 
-        for i := 0; i < outerLen; i++ {
-                if innerLen < len(mask[i]) {
-                        innerLen = len(mask[i])
-                }
-        }
-	var maskHolder []string
-        var buffer bytes.Buffer
-	var i, j int = 0, 0
-        for i = 0; i < outerLen; i++ {
-                for j = 0; j < innerLen; j++ {
-                        buffer.WriteString("1")
-                }
-                maskHolder = append(maskHolder, buffer.String())
-                buffer.Reset()
-        }
-        return maskHolder
+func (s *socketMask) Add(sockets ...int) error {
+	mask := *s
+	for _, i := range sockets {
+		if i < 0 || i >= 64 {
+			return fmt.Errorf("socket number must be in range 0-63")
+		}
+		mask |= 1 << uint64(i)
+	}
+	*s = mask
+	return nil
 }
 
-func getTopologyAffinity(arrangedMask, maskHolder []string) []string {
-        var topologyTemp []string	
-        checkflag := false
-	for _, n := range maskHolder {
-                if strings.Contains(n, "0") || len(maskHolder) != len(arrangedMask) {
-			checkflag = true
-			break
+func (s *socketMask) Remove(sockets ...int) error {
+	mask := *s
+	for _, i := range sockets {
+		if i < 0 || i >= 64 {
+			return fmt.Errorf("socket number must be in range 0-63")
+		}
+		mask &^= 1 << uint64(i)
+	}
+	*s = mask
+	return nil
+}
+
+func (s *socketMask) And(masks... SocketMask) {
+	for _, m := range masks {
+		*s &= *m.(*socketMask)
+	}
+}
+
+func (s *socketMask) Or(masks... SocketMask) {
+	for _, m := range masks {
+		*s |= *m.(*socketMask)
+	}
+}
+
+func (s *socketMask) Clear() {
+	*s = 0
+}
+
+func (s *socketMask) Fill() {
+	*s = socketMask(^uint64(0))
+}
+
+func (s *socketMask) IsEmpty() bool {
+	return *s == 0
+}
+
+func (s *socketMask) IsSet(socket int) bool {
+	if socket < 0 || socket >= 64 {
+		return false
+	}
+	return (*s & (1 << uint64(socket))) > 0
+}
+
+func (s *socketMask) IsEqual(mask SocketMask) bool{
+    return *s == *mask.(*socketMask)
+}
+
+
+func (s *socketMask) String() string {
+	str := ""
+	for i := uint64(0); i < 64; i++ {
+		if (*s & (1 << i)) > 0 {
+			str += "1"
+		} else {
+			str += "0"
 		}
 	}
-	for i := 0; i < len(maskHolder); i++ {
-                for j := 0; j < len(arrangedMask); j++ {
-                        tempStr := andOperation(maskHolder[i],arrangedMask[j])
-			existsInArranged := checkMaskForString(arrangedMask, tempStr)
-			existsInHolder := checkMaskForString(maskHolder, tempStr)
-			if checkflag {
-				if existsInArranged && existsInHolder {
-					topologyTemp = append(topologyTemp, tempStr)
-				}
-                        } else {
-				if existsInArranged {
-					topologyTemp = append(topologyTemp, tempStr)
-				}
-			}
-                }
-        }
-        duplicates := map[string]bool{}
-        for v:= range topologyTemp {
-                duplicates[topologyTemp[v]] = true
-        }
-        topologyResult := []string{}
-        for key, _ := range duplicates {
-                topologyResult = append(topologyResult, key)
-        }
-
-        return topologyResult
+	return str
 }
 
-func parseMask(mask []string) []int64 {
-        var maskStr string
-        min := strings.Count(mask[0], "1")
-        var num, index int
-
-        for i := 0; i < len(mask); i++ {
-                num = strings.Count(mask[i], "1")
-                if num < min {
-                        min = num
-                        index = i
-                }
-                maskStr = mask[index]
+func (s *socketMask) Count() int {
+    count := 0
+    for i := uint64(0); i < 64; i++ {
+        if (*s & (1 << i)) > 0 {
+            count++
         }
-        var maskInt []int64
-        for _, char := range maskStr {
-                convertedStr, err := strconv.Atoi(string(char))
-                if err != nil {
-                        klog.V(4).Infof("could not convert mask character: %v", err)
-                        return maskInt
-                }
-                maskInt = append(maskInt, int64(convertedStr))
-        }
-        klog.V(4).Infof("[socketmask] Mask Int in Parse Mask: %v", maskInt)
-        return maskInt
+    }
+    return count
 }
 
-func arrangeMask(mask [][]int64) []string {
-        var socketStr []string
-        var bufferNew bytes.Buffer
-        outerLen := len(mask)
-        innerLen := len(mask[0])
-        for i := 0; i < outerLen; i++ {
-                for j := 0; j < innerLen; j++ {
-                        if mask[i][j] == 1 {
-                                bufferNew.WriteString("1")
-                        } else if mask[i][j] == 0 {
-                                bufferNew.WriteString("0")
-                        }
-                }
-                socketStr = append(socketStr, bufferNew.String())
-                bufferNew.Reset()
+func (s *socketMask) GetSockets() []int {
+    var sockets []int
+     for i := uint64(0); i < 64; i++ {
+        if (*s & (1 << i)) > 0 {
+            sockets = append(sockets, int(i))
         }
-        return socketStr
-}
-
-func andOperation(val1, val2 string) (string) {
-        l1, l2 := len(val1), len(val2)
-        //compare lengths of strings - pad shortest with trailing zeros
-        if l1 != l2 {
-                // Get the bit difference
-                var num int
-                diff := math.Abs(float64(l1) - float64(l2))
-                num = int(diff)
-                if l1 < l2 {
-                        val1 = val1 + strings.Repeat("0", num)
-                } else {
-                        val2 = val2 + strings.Repeat("0", num)
-                }
-        }
-        length := len(val1)
-        byteArr := make([]byte, length)
-        for i := 0; i < length ; i++ {
-                byteArr[i] = val1[i] & val2[i]
-        }
-
-        return string(byteArr[:])
-}
-
-func checkMaskForString(mask []string, socket string) bool {
-	for _, n := range mask {
-		if socket == n {
-			return true
-		}
-	}
-	return false
+    }
+    return sockets
 }
