@@ -20,7 +20,7 @@ type strictPolicy struct {}
 
 var _ Policy = &strictPolicy{}
 
-const PolicyStrict policyName = "strict"
+const PolicyStrict string = "strict"
 
 func NewStrictPolicy() Policy {
     	return &strictPolicy{}

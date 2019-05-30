@@ -631,7 +631,7 @@ func (m *ManagerImpl) devicesToAllocate(podUID, contName, resource string, requi
     	klog.Infof("Topology Affinities for pod %v container %v are: %v", podUID, contName, containerTopologyHint)
     
     	sockets := make(map[int]bool)
-        socketsArray := containerTopologyHint.SocketMask.GetSockets()
+        socketsArray := containerTopologyHint.SocketAffinity.GetSockets()
        	for _, socket := range socketsArray {
             sockets[socket] = true
         }

@@ -17,26 +17,29 @@ limitations under the License.
 package socketmask
 
 import (
-    "fmt"
+	"fmt"
 )
 
+//SocketMask interface allows hint providers to create SocketMasks for TopologyHints
 type SocketMask interface {
 	Add(sockets ...int) error
 	Remove(sockets ...int) error
-	And(masks... SocketMask)
-	Or(masks... SocketMask)
+	And(masks ...SocketMask)
+	Or(masks ...SocketMask)
 	Clear()
 	Fill()
-    IsEqual(mask SocketMask) bool
+	IsEqual(mask SocketMask) bool
 	IsEmpty() bool
 	IsSet(socket int) bool
-    String() string
-    Count() int
-    GetSockets() []int
+	IsNarrowerThan(mask SocketMask) bool
+	String() string
+	Count() int
+	GetSockets() []int
 }
 
 type socketMask uint64
 
+//NewSocketMask creates a new SocketMask
 func NewSocketMask(sockets ...int) (SocketMask, error) {
 	s := socketMask(0)
 	err := (&s).Add(sockets...)
@@ -46,6 +49,7 @@ func NewSocketMask(sockets ...int) (SocketMask, error) {
 	return &s, nil
 }
 
+//Add adds the sockets with topology affinity to the SocketMask
 func (s *socketMask) Add(sockets ...int) error {
 	mask := *s
 	for _, i := range sockets {
@@ -58,6 +62,7 @@ func (s *socketMask) Add(sockets ...int) error {
 	return nil
 }
 
+//Remove removes specified sockets from SocketMask
 func (s *socketMask) Remove(sockets ...int) error {
 	mask := *s
 	for _, i := range sockets {
@@ -70,30 +75,36 @@ func (s *socketMask) Remove(sockets ...int) error {
 	return nil
 }
 
-func (s *socketMask) And(masks... SocketMask) {
+//And performs and operation on all bits in masks
+func (s *socketMask) And(masks ...SocketMask) {
 	for _, m := range masks {
 		*s &= *m.(*socketMask)
 	}
 }
 
-func (s *socketMask) Or(masks... SocketMask) {
+//Or performs or operation on all bits in masks
+func (s *socketMask) Or(masks ...SocketMask) {
 	for _, m := range masks {
 		*s |= *m.(*socketMask)
 	}
 }
 
+//Clear resets all bits in mask to zero
 func (s *socketMask) Clear() {
 	*s = 0
 }
 
+//Fill sets all bits in mask to one
 func (s *socketMask) Fill() {
 	*s = socketMask(^uint64(0))
 }
 
+//IsEmpty checks mask to see if all bits are zero
 func (s *socketMask) IsEmpty() bool {
 	return *s == 0
 }
 
+//IsSet checks socket in mask to see if bit is set to one
 func (s *socketMask) IsSet(socket int) bool {
 	if socket < 0 || socket >= 64 {
 		return false
@@ -101,11 +112,26 @@ func (s *socketMask) IsSet(socket int) bool {
 	return (*s & (1 << uint64(socket))) > 0
 }
 
-func (s *socketMask) IsEqual(mask SocketMask) bool{
-    return *s == *mask.(*socketMask)
+//IsEqual checks if masks are equal
+func (s *socketMask) IsEqual(mask SocketMask) bool {
+	return *s == *mask.(*socketMask)
 }
 
+// IsNarrowerThan checks if one mask is narrower than another.
+//
+// A mask is said to be "narrower" than another if it has lets bits set. If the
+// same number of bits are set in both masks, then the mask with more
+// lower-numbered bits set wins out.
+func (s *socketMask) IsNarrowerThan(mask SocketMask) bool {
+	if s.Count() == mask.Count() {
+		if *s < *mask.(*socketMask) {
+			return true
+		}
+	}
+	return s.Count() < mask.Count()
+}
 
+//String converts mask to string
 func (s *socketMask) String() string {
 	str := ""
 	for i := uint64(0); i < 64; i++ {
@@ -118,22 +144,24 @@ func (s *socketMask) String() string {
 	return str
 }
 
+//Count counts number of bits in mask set to one
 func (s *socketMask) Count() int {
-    count := 0
-    for i := uint64(0); i < 64; i++ {
-        if (*s & (1 << i)) > 0 {
-            count++
-        }
-    }
-    return count
+	count := 0
+	for i := uint64(0); i < 64; i++ {
+		if (*s & (1 << i)) > 0 {
+			count++
+		}
+	}
+	return count
 }
 
+//GetSockets returns each socket number with bits set to one
 func (s *socketMask) GetSockets() []int {
-    var sockets []int
-     for i := uint64(0); i < 64; i++ {
-        if (*s & (1 << i)) > 0 {
-            sockets = append(sockets, int(i))
-        }
-    }
-    return sockets
+	var sockets []int
+	for i := uint64(0); i < 64; i++ {
+		if (*s & (1 << i)) > 0 {
+			sockets = append(sockets, int(i))
+		}
+	}
+	return sockets
 }

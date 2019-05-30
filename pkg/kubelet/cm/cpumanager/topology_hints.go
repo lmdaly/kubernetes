@@ -25,7 +25,7 @@ import (
 )
 
 
-func (m *manager) GetTopologyHints(pod v1.Pod, container v1.Container) ([]topologymanager.TopologyHint, bool) {
+func (m *manager) GetTopologyHints(pod v1.Pod, container v1.Container) []topologymanager.TopologyHint {
     	var cpuHints []topologymanager.TopologyHint	
     	for resourceObj, amountObj := range container.Resources.Requests {
         	resource := string(resourceObj)
@@ -53,7 +53,7 @@ func (m *manager) GetTopologyHints(pod v1.Pod, container v1.Container) ([]topolo
             
             klog.Infof("CPUHints; %v, Admit: %v", cpuHints, admit)
     	}  
-    	return cpuHints, true 
+    	return cpuHints
 }
 
 func (m *manager) getAssignableCPUs(topo *topology.CPUTopology) cpuset.CPUSet {
@@ -81,12 +81,12 @@ func getCPUMask(socketCount int, cpuAccum *cpuAccumulator, requested int) []topo
               	totalCPUs += CPUsInSocketSize[i]
             	if CPUsInSocketSize[i] >= requested {
                     mask, _ := socketmask.NewSocketMask(i)
-                    cpuHints = append(cpuHints, topologymanager.TopologyHint{SocketMask: mask})
+                    cpuHints = append(cpuHints, topologymanager.TopologyHint{SocketAffinity: mask})
            	}                        
   	}
 	if totalCPUs >= requested {
 		crossSocketMask, crossSocket := buildCrossSocketMask(socketCount, CPUsInSocketSize); if crossSocket{
-            cpuHints = append(cpuHints, topologymanager.TopologyHint{SocketMask: crossSocketMask})   
+            cpuHints = append(cpuHints, topologymanager.TopologyHint{SocketAffinity: crossSocketMask})   
         }  		
    
   	}
@@ -113,7 +113,7 @@ func buildCrossSocketMask(socketCount int, CPUsInSocketSize []int) (socketmask.S
 func calculateIfCPUHasSocketAffinity(cpuHints []topologymanager.TopologyHint) bool {
     admit := false
     for _, hint := range cpuHints {
-        if hint.SocketMask.Count() == 1 {
+        if hint.SocketAffinity.Count() == 1 {
             admit = true;
             break
         }

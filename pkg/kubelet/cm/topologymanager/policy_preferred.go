@@ -20,7 +20,7 @@ type preferredPolicy struct {}
 
 var _ Policy = &preferredPolicy{}
 
-const PolicyPreferred policyName = "preferred"
+const PolicyPreferred string = "preferred"
 
 func NewPreferredPolicy() Policy {
     return &preferredPolicy{}

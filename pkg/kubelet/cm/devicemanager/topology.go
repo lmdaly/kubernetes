@@ -9,7 +9,7 @@ import (
     	pluginapi "k8s.io/kubernetes/pkg/kubelet/apis/deviceplugin/v1beta1"
 )
 
-func (m *ManagerImpl) GetTopologyHints(pod v1.Pod, container v1.Container) ([]topologymanager.TopologyHint, bool) {
+func (m *ManagerImpl) GetTopologyHints(pod v1.Pod, container v1.Container) []topologymanager.TopologyHint {
     	klog.Infof("Devices in GetTopologyHints: %v", m.allDevices)
         
         var deviceHints []topologymanager.TopologyHint
@@ -49,10 +49,10 @@ func (m *ManagerImpl) GetTopologyHints(pod v1.Pod, container v1.Container) ([]to
                     klog.Infof("Socket Mask: %v", mask.String())
                     if amountAvail >= amount {
                         if firstIteration {
-                            tempMaskSet = append(tempMaskSet, topologymanager.TopologyHint{SocketMask: mask})
+                            tempMaskSet = append(tempMaskSet, topologymanager.TopologyHint{SocketAffinity: mask})
                         } else {
                             isEqual := checkIfMaskEqualsStoreMask(deviceHints, mask) ; if isEqual {
-                                tempMaskSet = append(tempMaskSet, topologymanager.TopologyHint{SocketMask: mask})
+                                tempMaskSet = append(tempMaskSet, topologymanager.TopologyHint{SocketAffinity: mask})
                             }
                         }
                     }
@@ -72,13 +72,13 @@ func (m *ManagerImpl) GetTopologyHints(pod v1.Pod, container v1.Container) ([]to
                   }
                   crossSocketMask, _ := socketmask.NewSocketMask(allDeviceSocketsInt...)
                   klog.Infof("CrossSocketMask: %v", crossSocketMask.String())
-                  deviceHints = append(deviceHints, topologymanager.TopologyHint{SocketMask: crossSocketMask})
+                  deviceHints = append(deviceHints, topologymanager.TopologyHint{SocketAffinity: crossSocketMask})
             }          
             admit = calculateIfDeviceHasSocketAffinity(deviceHints)                
             klog.Infof("DeviceHints: %v, Admit: %v", deviceHints, admit)
         }
     
-    return deviceHints, admit;
+    return deviceHints
 }
 
 func (m *ManagerImpl) getAvailableDevices(resource string) sets.String{
@@ -109,7 +109,7 @@ func getDevicesPerSocket(resource string, available sets.String, allDevices map[
 func checkIfMaskEqualsStoreMask(existingDeviceHints []topologymanager.TopologyHint, newMask socketmask.SocketMask) bool {
     maskEqual := false
     for _, storedHint := range existingDeviceHints {
-        if storedHint.SocketMask.IsEqual(newMask){
+        if storedHint.SocketAffinity.IsEqual(newMask){
             maskEqual = true
             break
         }
@@ -120,7 +120,7 @@ func checkIfMaskEqualsStoreMask(existingDeviceHints []topologymanager.TopologyHi
 func calculateIfDeviceHasSocketAffinity(deviceHints []topologymanager.TopologyHint) bool {
     admit := false
     for _, hint := range deviceHints {
-        if hint.SocketMask.Count() == 1 {
+        if hint.SocketAffinity.Count() == 1 {
             admit = true;
             break
         }
