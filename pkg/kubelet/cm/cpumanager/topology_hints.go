@@ -81,12 +81,12 @@ func getCPUMask(socketCount int, cpuAccum *cpuAccumulator, requested int) []topo
               	totalCPUs += CPUsInSocketSize[i]
             	if CPUsInSocketSize[i] >= requested {
                     mask, _ := socketmask.NewSocketMask(i)
-                    cpuHints = append(cpuHints, topologymanager.TopologyHint{SocketAffinity: mask})
+                    cpuHints = append(cpuHints, topologymanager.TopologyHint{SocketAffinity: mask, Preferred: true})
            	}                        
   	}
 	if totalCPUs >= requested {
 		crossSocketMask, crossSocket := buildCrossSocketMask(socketCount, CPUsInSocketSize); if crossSocket{
-            cpuHints = append(cpuHints, topologymanager.TopologyHint{SocketAffinity: crossSocketMask})   
+            cpuHints = append(cpuHints, topologymanager.TopologyHint{SocketAffinity: crossSocketMask, Preferred: false})   
         }  		
    
   	}

@@ -630,25 +630,34 @@ func (m *ManagerImpl) devicesToAllocate(podUID, contName, resource string, requi
     	containerTopologyHint := m.topologyAffinityStore.GetAffinity(podUID, contName)
     	klog.Infof("Topology Affinities for pod %v container %v are: %v", podUID, contName, containerTopologyHint)
     
-    	sockets := make(map[int]bool)
+        availableTopologyAligned := available
+        allocated := available.UnsortedList()[:needed] 
+        sockets := make(map[int]bool)
         socketsArray := containerTopologyHint.SocketAffinity.GetSockets()
-       	for _, socket := range socketsArray {
+        for _, socket := range socketsArray {
             sockets[socket] = true
         }
-
-        allocated := available.UnsortedList()[:needed]
-    	availableTopologyAligned := available
-    	for availID := range available {
-        	for _, device := range allDevices[resource] {
-            		if availID == device.ID {
-                		if !sockets[int(device.Topology.Socket)] {
-                    			delete(availableTopologyAligned, availID)
-                		}
-                	break
-            		}	    
-        	}
-    	}
-    
+        
+        topologyAligned := false
+        for _, device := range allDevices[resource]{
+            topology := device.Topology
+            if topology != nil {
+                topologyAligned = true
+            }
+        }
+        
+        if topologyAligned {
+            for availID := range available {
+                for _, device := range allDevices[resource] {
+                        if availID == device.ID {
+                            if !sockets[int(device.Topology.Socket)] {
+                                    delete(availableTopologyAligned, availID)
+                            }
+                        break
+                        }	    
+                }
+            }
+        }
 	if int(availableTopologyAligned.Len()) < needed {
         	klog.Infof("[devicemanager] Requested number of devices unavailable in an Topology Aligned Manner for %s. Choosing arbitrary free devices.", resource)
 	} else {
