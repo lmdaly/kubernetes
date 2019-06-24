@@ -286,7 +286,7 @@ func NewContainerManager(mountUtil mount.Interface, cadvisorInterface cadvisor.I
 		qosContainerManager: qosContainerManager,
 	}
 
-	if utilfeature.DefaultFeatureGate.Enabled(kubefeatures.TopologyManager) {
+	if nodeConfig.ExperimentalTopologyManagerPolicy != "none" && utilfeature.DefaultFeatureGate.Enabled(kubefeatures.TopologyManager) {
 		klog.Infof("Node Config: %v", nodeConfig)
 		cm.topologyManager = topologymanager.NewManager(
 			nodeConfig.ExperimentalTopologyManagerPolicy,
