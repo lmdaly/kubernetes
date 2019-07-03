@@ -77,6 +77,9 @@ func NewManager(topologyPolicyName string) Manager {
 
 	switch topologyPolicyName {
 
+	case PolicyNone:
+		policy = NewNonePolicy()
+
 	case PolicyPreferred:
 		policy = NewPreferredPolicy()
 
@@ -84,8 +87,8 @@ func NewManager(topologyPolicyName string) Manager {
 		policy = NewStrictPolicy()
 
 	default:
-		klog.Errorf("[topologymanager] Unknown policy %s, using default policy %s", topologyPolicyName, PolicyPreferred)
-		policy = NewPreferredPolicy()
+		klog.Errorf("[topologymanager] Unknown policy %s, using default policy %s", topologyPolicyName, PolicyNone)
+		policy = NewNonePolicy()
 	}
 
 	var hp []HintProvider
@@ -161,7 +164,7 @@ func (m *manager) calculateAffinity(pod v1.Pod, container v1.Container) Topology
 		hints := provider.GetTopologyHints(pod, container)
 
 		// If hints is nil, overwrite 'hints' with a preferred any-socket affinity.
-		if hints == nil {
+		if hints == nil || len(hints) == 0 {
 			klog.Infof("[topologymanager] Hint Provider has no preference for socket affinity")
 			affinity, _ := socketmask.NewSocketMask()
 			affinity.Fill()
@@ -257,6 +260,12 @@ func (m *manager) RemoveContainer(containerID string) error {
 
 func (m *manager) Admit(attrs *lifecycle.PodAdmitAttributes) lifecycle.PodAdmitResult {
 	klog.Infof("[topologymanager] Topology Admit Handler")
+	if m.policy.Name() == "none" {
+		klog.Infof("[topologymanager] Skipping calculate topology affinity as policy: none")
+		return lifecycle.PodAdmitResult{
+			Admit: true,
+		}
+	}
 	pod := attrs.Pod
 	c := make(map[string]TopologyHint)
 	klog.Infof("[topologymanager] Pod QoS Level: %v", pod.Status.QOSClass)

@@ -111,6 +111,19 @@ func TestCalculateAffinity(t *testing.T) {
 			},
 		},
 		{
+			name: "HintProvider returns empty non-nil []TopologyHint",
+			hp: []HintProvider{
+				&mockHintProvider{
+					[]TopologyHint{},
+				},
+			},
+			expected: TopologyHint{
+				SocketAffinity: NewTestSocketMaskFull(),
+				Preferred:      true,
+			},
+		},
+
+		{
 			name: "Single TopologyHint with Preferred as true and SocketAffinity as nil",
 			hp: []HintProvider{
 				&mockHintProvider{
@@ -627,38 +640,165 @@ func TestAdmit(t *testing.T) {
 		name     string
 		result   lifecycle.PodAdmitResult
 		qosClass v1.PodQOSClass
+		policy   Policy
+		hp       []HintProvider
 		expected bool
 	}{
 		{
-			name:     "QOSClass set as Guaranteed",
-			result:   lifecycle.PodAdmitResult{},
-			qosClass: v1.PodQOSGuaranteed,
-			expected: true,
-		},
-		{
-			name:     "QOSClass set as Burstable",
-			result:   lifecycle.PodAdmitResult{},
-			qosClass: v1.PodQOSBurstable,
-			expected: true,
-		},
-		{
-			name:     "QOSClass set as BestEffort",
-			result:   lifecycle.PodAdmitResult{},
+			name:     "QOSClass set as BestEffort. None Policy. No Hints.",
 			qosClass: v1.PodQOSBestEffort,
+			policy:   NewNonePolicy(),
+			hp:       []HintProvider{},
 			expected: true,
+		},
+		{
+			name:     "QOSClass set as Guaranteed. None Policy. No Hints.",
+			qosClass: v1.PodQOSGuaranteed,
+			policy:   NewNonePolicy(),
+			hp:       []HintProvider{},
+			expected: true,
+		},
+		{
+			name:     "QOSClass set as Guaranteed. Preferred Policy. Preferred Affinity.",
+			qosClass: v1.PodQOSGuaranteed,
+			policy:   NewPreferredPolicy(),
+			hp: []HintProvider{
+				&mockHintProvider{
+					[]TopologyHint{
+						{
+							SocketAffinity: NewTestSocketMask(0),
+							Preferred:      true,
+						},
+						{
+							SocketAffinity: NewTestSocketMask(0, 1),
+							Preferred:      false,
+						},
+					},
+				},
+			},
+			expected: true,
+		},
+		{
+			name:     "QOSClass set as Guaranteed. Preferred Policy. More than one Preferred Affinity.",
+			qosClass: v1.PodQOSGuaranteed,
+			policy:   NewPreferredPolicy(),
+			hp: []HintProvider{
+				&mockHintProvider{
+					[]TopologyHint{
+						{
+							SocketAffinity: NewTestSocketMask(0),
+							Preferred:      true,
+						},
+						{
+							SocketAffinity: NewTestSocketMask(1),
+							Preferred:      true,
+						},
+						{
+							SocketAffinity: NewTestSocketMask(0, 1),
+							Preferred:      false,
+						},
+					},
+				},
+			},
+			expected: true,
+		},
+		{
+			name:     "QOSClass set as Guaranteed. Preferred Policy. No Preferred Affinity.",
+			qosClass: v1.PodQOSGuaranteed,
+			policy:   NewPreferredPolicy(),
+			hp: []HintProvider{
+				&mockHintProvider{
+					[]TopologyHint{
+						{
+							SocketAffinity: NewTestSocketMask(0, 1),
+							Preferred:      false,
+						},
+					},
+				},
+			},
+			expected: true,
+		},
+		{
+			name:     "QOSClass set as Guaranteed. Strict Policy. Preferred Affinity.",
+			qosClass: v1.PodQOSGuaranteed,
+			policy:   NewStrictPolicy(),
+			hp: []HintProvider{
+				&mockHintProvider{
+					[]TopologyHint{
+						{
+							SocketAffinity: NewTestSocketMask(0),
+							Preferred:      true,
+						},
+						{
+							SocketAffinity: NewTestSocketMask(0, 1),
+							Preferred:      false,
+						},
+					},
+				},
+			},
+			expected: true,
+		},
+		{
+			name:     "QOSClass set as Guaranteed. Strict Policy. More than one Preferred affinity.",
+			qosClass: v1.PodQOSGuaranteed,
+			policy:   NewStrictPolicy(),
+			hp: []HintProvider{
+				&mockHintProvider{
+					[]TopologyHint{
+						{
+							SocketAffinity: NewTestSocketMask(0),
+							Preferred:      true,
+						},
+						{
+							SocketAffinity: NewTestSocketMask(1),
+							Preferred:      true,
+						},
+						{
+							SocketAffinity: NewTestSocketMask(0, 1),
+							Preferred:      false,
+						},
+					},
+				},
+			},
+			expected: true,
+		},
+		{
+			name:     "QOSClass set as Guaranteed. Strict Policy. No Preferred affinity.",
+			qosClass: v1.PodQOSGuaranteed,
+			policy:   NewStrictPolicy(),
+			hp: []HintProvider{
+				&mockHintProvider{
+					[]TopologyHint{
+						{
+							SocketAffinity: NewTestSocketMask(0, 1),
+							Preferred:      false,
+						},
+					},
+				},
+			},
+			expected: false,
 		},
 	}
 	for _, tc := range tcases {
 		man := manager{}
+		man.policy = tc.policy
 		man.podTopologyHints = make(map[string]map[string]TopologyHint)
+		man.hintProviders = tc.hp
+		pod := &v1.Pod{
+			Spec: v1.PodSpec{
+				Containers: []v1.Container{
+					{
+						Resources: v1.ResourceRequirements{},
+					},
+				},
+			},
+		}
 		podAttr := lifecycle.PodAdmitAttributes{}
-		pod := v1.Pod{}
 		pod.Status.QOSClass = tc.qosClass
-		podAttr.Pod = &pod
-		//c := make(containers)
+		podAttr.Pod = pod
 		actual := man.Admit(&podAttr)
-		if reflect.DeepEqual(actual, tc.result) {
-			t.Errorf("Error occurred, expected Admit in result to be %v got %v", tc.result, actual.Admit)
+		if actual.Admit != tc.expected {
+			t.Errorf("Error occurred, expected Admit in result to be %v got %v", tc.expected, actual.Admit)
 		}
 	}
 }
