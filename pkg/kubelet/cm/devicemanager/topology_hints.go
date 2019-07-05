@@ -18,6 +18,8 @@ func (m *ManagerImpl) GetTopologyHints(pod v1.Pod, container v1.Container) []top
 
 	firstIteration := true
 	containerRequiresDevice := false
+    
+    crossSocketPreferred := false
 
 	for resourceObj, amountObj := range container.Resources.Requests {
 		resource := string(resourceObj)
@@ -34,6 +36,19 @@ func (m *ManagerImpl) GetTopologyHints(pod v1.Pod, container v1.Container) []top
 				klog.Infof("[devicemanager-topology] Device does not have a topology preference")
 				continue
 			}
+            
+            totalDevicesPerSocket := getAllDevicesPerSocket(resource, m.allDevices)
+            
+            preferred := true
+            for _, socketAmount := range totalDevicesPerSocket {
+                if socketAmount > amount {
+                    preferred = false
+                }
+            }
+            if preferred {
+                crossSocketPreferred = true
+            }
+            
 			available := m.getAvailableDevices(resource)
 
 			if int64(available.Len()) < amount {
@@ -43,10 +58,10 @@ func (m *ManagerImpl) GetTopologyHints(pod v1.Pod, container v1.Container) []top
 			klog.Infof("[devicemanager-topology] Available devices for resource %v: %v", resource, available)
 
 			deviceSocketAvail := getDevicesPerSocket(resource, available, m.allDevices)
-
+            
 			for socket, amountAvail := range deviceSocketAvail {
-				mask, _ := socketmask.NewSocketMask(int(socket))
 				if amountAvail >= amount {
+                    mask, _ := socketmask.NewSocketMask(int(socket))
 					if firstIteration {
 						tempMaskSet = append(tempMaskSet, topologymanager.TopologyHint{SocketAffinity: mask, Preferred: true})
 					} else {
@@ -65,13 +80,14 @@ func (m *ManagerImpl) GetTopologyHints(pod v1.Pod, container v1.Container) []top
 	}
 
 	if containerRequiresDevice {
-		if len(allDeviceSockets) > 1 {
+		if len(allDeviceSockets) > 1 {           
 			var allDeviceSocketsInt []int
 			for socket := range allDeviceSockets {
 				allDeviceSocketsInt = append(allDeviceSocketsInt, socket)
 			}
+            klog.Infof("Cross Socket Preferred: %v", crossSocketPreferred)
 			crossSocketMask, _ := socketmask.NewSocketMask(allDeviceSocketsInt...)
-			deviceHints = append(deviceHints, topologymanager.TopologyHint{SocketAffinity: crossSocketMask, Preferred: false})
+			deviceHints = append(deviceHints, topologymanager.TopologyHint{SocketAffinity: crossSocketMask, Preferred: crossSocketPreferred})
 		}
 		klog.Infof("[devicemanager-topology] DeviceHints: %v", deviceHints)
 	}
@@ -90,15 +106,20 @@ func (m *ManagerImpl) getAvailableDevices(resource string) sets.String {
 	return available
 }
 
-func checkIfDeviceHasSocketAlignment(resource string, allDevices map[string][]pluginapi.Device) bool {
-	topologyAligned := false
-	for _, device := range allDevices[resource] {
-		topology := device.Topology
-		if topology != nil {
-			topologyAligned = true
-		}
-	}
-	return topologyAligned
+func checkIfDeviceHasSocketAlignment(resource string, allDevices map[string][]pluginapi.Device) bool {   
+    if allDevices[resource][0].Topology != nil {
+        return true
+    }
+    return false
+}
+
+func getAllDevicesPerSocket(resource string, allDevices map[string][]pluginapi.Device) map[int64]int64 {
+    totalDeviceSocketAvail := make(map[int64]int64)
+    for _, device := range allDevices[resource] {
+        totalDeviceSocketAvail[device.Topology.Socket]++
+    }
+    klog.Infof("total devices per socket: %v", totalDeviceSocketAvail)
+    return totalDeviceSocketAvail
 }
 
 func getDevicesPerSocket(resource string, available sets.String, allDevices map[string][]pluginapi.Device) map[int64]int64 {
@@ -106,8 +127,8 @@ func getDevicesPerSocket(resource string, available sets.String, allDevices map[
 	for availID := range available {
 		for _, device := range allDevices[resource] {
 			if availID == device.ID {
-				socket := device.Topology.Socket
-				deviceSocketAvail[socket]++
+				//socket := device.Topology.Socket
+				deviceSocketAvail[device.Topology.Socket]++
 			}
 		}
 	}
