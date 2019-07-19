@@ -74,7 +74,11 @@ message ListAndWatchResponse {
 }
 
 message TopologyInfo {
-    	int64 socket = 1;
+    	NUMANode node = 1;
+}
+
+message NUMANode {
+    int64 id = 1;
 }
 
 /* E.g:

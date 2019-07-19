@@ -672,7 +672,7 @@ func (m *ManagerImpl) devicesToAllocate(podUID, contName, resource string, requi
             for availID := range available {
                 for _, device := range allDevices[resource] {
                     if availID == device.ID {
-                        if !sockets[int(device.Topology.Socket)] {
+                        if !sockets[int(device.Topology.Node.Id)] {
                             delete(availableTopologyAligned, availID)
                         }
                         break

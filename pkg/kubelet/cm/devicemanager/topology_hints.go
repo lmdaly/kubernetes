@@ -116,7 +116,7 @@ func checkIfDeviceHasSocketAlignment(resource string, allDevices map[string][]pl
 func getAllDevicesPerSocket(resource string, allDevices map[string][]pluginapi.Device) map[int64]int64 {
     totalDeviceSocketAvail := make(map[int64]int64)
     for _, device := range allDevices[resource] {
-        totalDeviceSocketAvail[device.Topology.Socket]++
+        totalDeviceSocketAvail[device.Topology.Node.Id]++
     }
     klog.Infof("total devices per socket: %v", totalDeviceSocketAvail)
     return totalDeviceSocketAvail
@@ -128,7 +128,7 @@ func getDevicesPerSocket(resource string, available sets.String, allDevices map[
 		for _, device := range allDevices[resource] {
 			if availID == device.ID {
 				//socket := device.Topology.Socket
-				deviceSocketAvail[device.Topology.Socket]++
+				deviceSocketAvail[device.Topology.Node.Id]++
 			}
 		}
 	}
