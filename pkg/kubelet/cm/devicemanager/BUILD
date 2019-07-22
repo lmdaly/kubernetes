@@ -45,7 +45,7 @@ go_test(
     srcs = [
         "endpoint_test.go",
         "manager_test.go",
-        "topology_test.go",
+        "topology_hints_test.go",
     ],
     embed = [":go_default_library"],
     deps = [
