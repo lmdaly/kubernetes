@@ -29,6 +29,14 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/cm/topologymanager/socketmask"
 )
 
+type mockAffinityStore struct {
+	hint topologymanager.TopologyHint
+}
+
+func (m *mockAffinityStore) GetAffinity(podUID string, containerName string) topologymanager.TopologyHint {
+	return m.hint
+}
+
 func makeDevice(id string, numa int) pluginapi.Device {
 	return pluginapi.Device{
 		ID:       id,
@@ -215,6 +223,164 @@ func TestGetTopologyHints(t *testing.T) {
 			if !reflect.DeepEqual(hints[r], tc.expectedHints[r]) {
 				t.Errorf("%v: Expected result to be %v, got %v", tc.description, tc.expectedHints[r], hints[r])
 			}
+		}
+	}
+}
+
+func TestTopologyAlignedAllocation(t *testing.T) {
+	tcases := []struct {
+		description        string
+		resource           string
+		request            int
+		devices            []pluginapi.Device
+		hint               topologymanager.TopologyHint
+		expectedAllocation sets.String
+	}{
+		{
+			description: "Single Request, socket 0",
+			resource:    "resource",
+			request:     1,
+			devices: []pluginapi.Device{
+				makeDevice("Dev1", 0),
+				makeDevice("Dev2", 1),
+			},
+			hint: topologymanager.TopologyHint{
+				SocketAffinity: makeSocketMask(0),
+				Preferred:      true,
+			},
+			expectedAllocation: sets.NewString("Dev1"),
+		},
+		{
+			description: "Single Request, socket 1",
+			resource:    "resource",
+			request:     1,
+			devices: []pluginapi.Device{
+				makeDevice("Dev1", 0),
+				makeDevice("Dev2", 1),
+			},
+			hint: topologymanager.TopologyHint{
+				SocketAffinity: makeSocketMask(1),
+				Preferred:      true,
+			},
+			expectedAllocation: sets.NewString("Dev2"),
+		},
+		{
+			description: "Request for 2, socket 0",
+			resource:    "resource",
+			request:     2,
+			devices: []pluginapi.Device{
+				makeDevice("Dev1", 0),
+				makeDevice("Dev2", 1),
+				makeDevice("Dev3", 0),
+				makeDevice("Dev4", 1),
+			},
+			hint: topologymanager.TopologyHint{
+				SocketAffinity: makeSocketMask(0),
+				Preferred:      true,
+			},
+			expectedAllocation: sets.NewString("Dev1", "Dev3"),
+		},
+		{
+			description: "Request for 2, socket 1",
+			resource:    "resource",
+			request:     2,
+			devices: []pluginapi.Device{
+				makeDevice("Dev1", 0),
+				makeDevice("Dev2", 1),
+				makeDevice("Dev3", 0),
+				makeDevice("Dev4", 1),
+			},
+			hint: topologymanager.TopologyHint{
+				SocketAffinity: makeSocketMask(1),
+				Preferred:      true,
+			},
+			expectedAllocation: sets.NewString("Dev2", "Dev4"),
+		},
+		{
+			description: "Request for 4, unsatisfiable, prefer socket 0",
+			resource:    "resource",
+			request:     4,
+			devices: []pluginapi.Device{
+				makeDevice("Dev1", 0),
+				makeDevice("Dev2", 1),
+				makeDevice("Dev3", 0),
+				makeDevice("Dev4", 1),
+				makeDevice("Dev5", 0),
+				makeDevice("Dev6", 1),
+			},
+			hint: topologymanager.TopologyHint{
+				SocketAffinity: makeSocketMask(0),
+				Preferred:      true,
+			},
+			expectedAllocation: sets.NewString("Dev1", "Dev3", "Dev5", "Dev2"),
+		},
+		{
+			description: "Request for 4, unsatisfiable, prefer socket 1",
+			resource:    "resource",
+			request:     4,
+			devices: []pluginapi.Device{
+				makeDevice("Dev1", 0),
+				makeDevice("Dev2", 1),
+				makeDevice("Dev3", 0),
+				makeDevice("Dev4", 1),
+				makeDevice("Dev5", 0),
+				makeDevice("Dev6", 1),
+			},
+			hint: topologymanager.TopologyHint{
+				SocketAffinity: makeSocketMask(1),
+				Preferred:      true,
+			},
+			expectedAllocation: sets.NewString("Dev2", "Dev4", "Dev6", "Dev1"),
+		},
+		{
+			description: "Request for 4, multisocket",
+			resource:    "resource",
+			request:     4,
+			devices: []pluginapi.Device{
+				makeDevice("Dev1", 0),
+				makeDevice("Dev2", 1),
+				makeDevice("Dev3", 2),
+				makeDevice("Dev4", 3),
+				makeDevice("Dev5", 0),
+				makeDevice("Dev6", 1),
+				makeDevice("Dev7", 2),
+				makeDevice("Dev8", 3),
+			},
+			hint: topologymanager.TopologyHint{
+				SocketAffinity: makeSocketMask(1,3),
+				Preferred:      true,
+			},
+			expectedAllocation: sets.NewString("Dev2", "Dev4", "Dev6", "Dev8"),
+		},
+	}
+	for _, tc := range tcases {
+		m := ManagerImpl{
+			allDevices:            make(map[string]map[string]pluginapi.Device),
+			healthyDevices:        make(map[string]sets.String),
+			allocatedDevices:      make(map[string]sets.String),
+			podDevices:            make(podDevices),
+			sourcesReady:          &sourcesReadyStub{},
+			activePods:            func() []*v1.Pod { return []*v1.Pod{} },
+			topologyAffinityStore: &mockAffinityStore{tc.hint},
+		}
+
+		m.allDevices[tc.resource] = make(map[string]pluginapi.Device)
+		m.healthyDevices[tc.resource] = sets.NewString()
+
+		for _, d := range tc.devices {
+			m.allDevices[tc.resource][d.ID] = d
+			m.healthyDevices[tc.resource].Insert(d.ID)
+		}
+
+		allocated, err := m.devicesToAllocate("podUID", "containerName", tc.resource, tc.request, sets.NewString())
+
+		if err != nil {
+			t.Errorf("Unexpected error: %v", err)
+			continue
+		}
+
+		if !reflect.DeepEqual(allocated, tc.expectedAllocation) {
+			t.Errorf("%v. expected allocation: %v but got: %v", tc.description, tc.expectedAllocation, allocated)
 		}
 	}
 }
