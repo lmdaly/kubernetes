@@ -39,6 +39,7 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/checkpointmanager"
 	"k8s.io/kubernetes/pkg/kubelet/checkpointmanager/errors"
 	"k8s.io/kubernetes/pkg/kubelet/cm/devicemanager/checkpoint"
+	"k8s.io/kubernetes/pkg/kubelet/cm/topologymanager"
 	"k8s.io/kubernetes/pkg/kubelet/config"
 	"k8s.io/kubernetes/pkg/kubelet/lifecycle"
 	"k8s.io/kubernetes/pkg/kubelet/metrics"
@@ -91,6 +92,9 @@ type ManagerImpl struct {
 	// podDevices contains pod to allocated device mapping.
 	podDevices        podDevices
 	checkpointManager checkpointmanager.CheckpointManager
+
+	//Store of Topology Affinties that the Device Manager can query
+	topologyAffinityStore topologymanager.Store
 }
 
 type endpointInfo struct {
@@ -104,11 +108,11 @@ func (s *sourcesReadyStub) AddSource(source string) {}
 func (s *sourcesReadyStub) AllReady() bool          { return true }
 
 // NewManagerImpl creates a new manager.
-func NewManagerImpl() (*ManagerImpl, error) {
-	return newManagerImpl(pluginapi.KubeletSocket)
+func NewManagerImpl(topologyAffinityStore topologymanager.Store) (*ManagerImpl, error) {
+	return newManagerImpl(pluginapi.KubeletSocket, topologyAffinityStore)
 }
 
-func newManagerImpl(socketPath string) (*ManagerImpl, error) {
+func newManagerImpl(socketPath string, topologyAffinityStore topologymanager.Store) (*ManagerImpl, error) {
 	klog.V(2).Infof("Creating Device Plugin manager at %s", socketPath)
 
 	if socketPath == "" || !filepath.IsAbs(socketPath) {
@@ -119,12 +123,13 @@ func newManagerImpl(socketPath string) (*ManagerImpl, error) {
 	manager := &ManagerImpl{
 		endpoints: make(map[string]endpointInfo),
 
-		socketname:       file,
-		socketdir:        dir,
-		healthyDevices:   make(map[string]sets.String),
-		unhealthyDevices: make(map[string]sets.String),
-		allocatedDevices: make(map[string]sets.String),
-		podDevices:       make(podDevices),
+		socketname:            file,
+		socketdir:             dir,
+		healthyDevices:        make(map[string]sets.String),
+		unhealthyDevices:      make(map[string]sets.String),
+		allocatedDevices:      make(map[string]sets.String),
+		podDevices:            make(podDevices),
+		topologyAffinityStore: topologyAffinityStore,
 	}
 	manager.callback = manager.genericDeviceUpdateCallback
 
