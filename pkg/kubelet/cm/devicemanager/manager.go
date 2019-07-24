@@ -80,6 +80,9 @@ type ManagerImpl struct {
 	// e.g. a new device is advertised, two old devices are deleted and a running device fails.
 	callback monitorCallback
 
+	// allDevices is a map by resource name of all the devices currently registered to the device manager
+	allDevices map[string]map[string]pluginapi.Device
+
 	// healthyDevices contains all of the registered healthy resourceNames and their exported device IDs.
 	healthyDevices map[string]sets.String
 
@@ -125,6 +128,7 @@ func newManagerImpl(socketPath string, topologyAffinityStore topologymanager.Sto
 
 		socketname:            file,
 		socketdir:             dir,
+		allDevices:            make(map[string]map[string]pluginapi.Device),
 		healthyDevices:        make(map[string]sets.String),
 		unhealthyDevices:      make(map[string]sets.String),
 		allocatedDevices:      make(map[string]sets.String),
@@ -150,7 +154,9 @@ func (m *ManagerImpl) genericDeviceUpdateCallback(resourceName string, devices [
 	m.mutex.Lock()
 	m.healthyDevices[resourceName] = sets.NewString()
 	m.unhealthyDevices[resourceName] = sets.NewString()
+	m.allDevices[resourceName] = make(map[string]pluginapi.Device)
 	for _, dev := range devices {
+		m.allDevices[resourceName][dev.ID] = dev
 		if dev.Health == pluginapi.Healthy {
 			m.healthyDevices[resourceName].Insert(dev.ID)
 		} else {
@@ -638,7 +644,32 @@ func (m *ManagerImpl) devicesToAllocate(podUID, contName, resource string, requi
 	if available.Len() < needed {
 		return nil, fmt.Errorf("requested number of devices unavailable for %s. Requested: %d, Available: %d", resource, needed, available.Len())
 	}
+
+	// By default, pull devices from the unsorted list of available devices.
 	allocated := available.UnsortedList()[:needed]
+
+	// If topology alignment is desired, update allocated to the set of devices
+	// with the best alignment.
+	containerTopologyHint := m.topologyAffinityStore.GetAffinity(podUID, contName)
+	if containerTopologyHint.SocketAffinity != nil {
+		klog.Infof("Topology Affinities for pod %v container %v are: %v", podUID, contName, containerTopologyHint)
+
+		bestNumAligned := 0
+		m.iterateDeviceCombinations(available, needed, func(combination sets.String) {
+			numAligned := 0
+			for c := range combination {
+				affinity := int(m.allDevices[resource][c].Topology.Node.Id)
+				if containerTopologyHint.SocketAffinity.IsSet(affinity) {
+					numAligned++
+				}
+			}
+
+			if numAligned > bestNumAligned {
+				allocated = combination.List()
+				bestNumAligned = numAligned
+			}
+		})
+	}
 	// Updates m.allocatedDevices with allocated devices to prevent them
 	// from being allocated to other pods/containers, given that we are
 	// not holding lock during the rpc call.
