@@ -27,7 +27,7 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/cm/topologymanager/socketmask"
 )
 
-func (m *manager) GetTopologyHints(pod v1.Pod, container v1.Container) []topologymanager.TopologyHint {
+func (m *manager) GetTopologyHints(pod v1.Pod, container v1.Container) map[string][]topologymanager.TopologyHint {
 	var cpuHints []topologymanager.TopologyHint
 	for resourceObj, amountObj := range container.Resources.Requests {
 		resource := string(resourceObj)
@@ -69,8 +69,12 @@ func (m *manager) GetTopologyHints(pod v1.Pod, container v1.Container) []topolog
 			cpuHints = getCPUHintsPreferred(cpuHintsAffinity, requested, mostCPUs)
 		}
 	}
+
 	klog.Infof("[cpumanager] Topology Hints for pod: %v", cpuHints)
-	return cpuHints
+
+	return map[string][]topologymanager.TopologyHint{
+		"cpu": cpuHints,
+	}
 }
 
 func (m *manager) getReservedCPUs(topo *topology.CPUTopology) cpuset.CPUSet {

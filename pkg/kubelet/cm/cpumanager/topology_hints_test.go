@@ -123,7 +123,7 @@ func TestGetTopologyHints(t *testing.T) {
 			name:          "Request 11 CPUs, 4 available on Socket 0, 6 available on Socket 1",
 			pod:           *testPod4,
 			container:     *testContainer4,
-			expectedHints: []topologymanager.TopologyHint{},
+			expectedHints: nil,
 		},
 	}
 	for _, tc := range tcases {
@@ -131,8 +131,8 @@ func TestGetTopologyHints(t *testing.T) {
 		if len(tc.expectedHints) == 0 && len(hints) == 0 {
 			continue
 		}
-		if !reflect.DeepEqual(tc.expectedHints, hints) {
-			t.Errorf("Expected in result to be %v , got %v", tc.expectedHints, hints)
+		if !reflect.DeepEqual(tc.expectedHints, hints["cpu"]) {
+			t.Errorf("Expected in result to be %v , got %v", tc.expectedHints, hints["cpu"])
 		}
 
 	}
