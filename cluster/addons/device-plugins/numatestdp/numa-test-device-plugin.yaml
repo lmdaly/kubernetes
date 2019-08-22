@@ -1,0 +1,19 @@
+kind: Pod
+apiVersion: v1
+metadata:
+  name: numatestdp
+spec:
+  containers:
+  - name: testdpcontainer
+    image: numa-test-dp 
+    imagePullPolicy: IfNotPresent
+    command: [ "/bin/bash", "-c", "--" ]
+    args: [ "./numa-test-device-plugin --logtostderr -v 10" ]
+    volumeMounts:
+    - mountPath: /var/lib/kubelet/device-plugins/ 
+      name: devicesock 
+      readOnly: false
+  volumes:
+  - name: devicesock 
+    hostPath:
+      path: /var/lib/kubelet/device-plugins/
