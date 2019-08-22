@@ -52,11 +52,6 @@ func TestNewManager(t *testing.T) {
 			expectedPolicy: "best-effort",
 		},
 		{
-			description:    "Policy is set to strict",
-			policyName:     "strict",
-			expectedPolicy: "strict",
-		},
-		{
 			description:   "Policy is set to unknown",
 			policyName:    "unknown",
 			expectedError: fmt.Errorf("unknown policy: \"unknown\""),
@@ -857,72 +852,6 @@ func TestAdmit(t *testing.T) {
 				},
 			},
 			expected: true,
-		},
-		{
-			name:     "QOSClass set as Guaranteed. Strict Policy. Preferred Affinity.",
-			qosClass: v1.PodQOSGuaranteed,
-			policy:   NewStrictPolicy(),
-			hp: []HintProvider{
-				&mockHintProvider{
-					map[string][]TopologyHint{
-						"resource": {
-							{
-								SocketAffinity: NewTestSocketMask(0),
-								Preferred:      true,
-							},
-							{
-								SocketAffinity: NewTestSocketMask(0, 1),
-								Preferred:      false,
-							},
-						},
-					},
-				},
-			},
-			expected: true,
-		},
-		{
-			name:     "QOSClass set as Guaranteed. Strict Policy. More than one Preferred affinity.",
-			qosClass: v1.PodQOSGuaranteed,
-			policy:   NewStrictPolicy(),
-			hp: []HintProvider{
-				&mockHintProvider{
-					map[string][]TopologyHint{
-						"resource": {
-							{
-								SocketAffinity: NewTestSocketMask(0),
-								Preferred:      true,
-							},
-							{
-								SocketAffinity: NewTestSocketMask(1),
-								Preferred:      true,
-							},
-							{
-								SocketAffinity: NewTestSocketMask(0, 1),
-								Preferred:      false,
-							},
-						},
-					},
-				},
-			},
-			expected: true,
-		},
-		{
-			name:     "QOSClass set as Guaranteed. Strict Policy. No Preferred affinity.",
-			qosClass: v1.PodQOSGuaranteed,
-			policy:   NewStrictPolicy(),
-			hp: []HintProvider{
-				&mockHintProvider{
-					map[string][]TopologyHint{
-						"resource": {
-							{
-								SocketAffinity: NewTestSocketMask(0, 1),
-								Preferred:      false,
-							},
-						},
-					},
-				},
-			},
-			expected: false,
 		},
 	}
 	for _, tc := range tcases {

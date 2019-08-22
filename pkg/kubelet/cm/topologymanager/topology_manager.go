@@ -85,9 +85,6 @@ func NewManager(topologyPolicyName string) (Manager, error) {
 	case PolicyBestEffort:
 		policy = NewBestEffortPolicy()
 
-	case PolicyStrict:
-		policy = NewStrictPolicy()
-
 	default:
 		return nil, fmt.Errorf("unknown policy: \"%s\"", topologyPolicyName)
 	}
