@@ -30,6 +30,10 @@ import (
 	"k8s.io/kubernetes/pkg/apis/core/helper"
 )
 
+func CoresResourceName() v1.ResourceName{
+    return v1.ResourceName("Core")
+}
+
 // IsExtendedResourceName returns true if:
 // 1. the resource name is not in the default namespace;
 // 2. resource name does not have "requests." prefix,

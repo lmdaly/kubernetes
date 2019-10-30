@@ -25,6 +25,8 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	v1helper "k8s.io/kubernetes/pkg/apis/core/v1/helper"
 	kubetypes "k8s.io/kubernetes/pkg/kubelet/types"
+    
+    "k8s.io/klog"
 )
 
 const (
@@ -34,9 +36,17 @@ const (
 	CrioSocket = "/var/run/crio/crio.sock"
 )
 
-// CapacityFromMachineInfo returns the capacity of the resources from the machine info.
-func CapacityFromMachineInfo(info *cadvisorapi.MachineInfo) v1.ResourceList {
-	c := v1.ResourceList{
+// CapacityFromMachineInfo returns the capacity of the resources from the machine info. 
+func CapacityFromMachineInfo(info *cadvisorapi.MachineInfo) v1.ResourceList {   
+    klog.Infof("[cadvisor] Cores: %v", info.NumCores)
+    coreCount := 0
+    for _, node := range info.Topology {
+        klog.Infof("Node in Topology")
+        klog.Infof("Cores on Node: %v", node.Cores)
+        coreCount += len(node.Cores)
+    }
+    klog.Infof("Cores calculated: %v", coreCount)
+    c := v1.ResourceList{
 		v1.ResourceCPU: *resource.NewMilliQuantity(
 			int64(info.NumCores*1000),
 			resource.DecimalSI),
@@ -44,6 +54,8 @@ func CapacityFromMachineInfo(info *cadvisorapi.MachineInfo) v1.ResourceList {
 			int64(info.MemoryCapacity),
 			resource.BinarySI),
 	}
+    
+    c[v1helper.CoresResourceName()] = *resource.NewQuantity(int64(coreCount), resource.DecimalSI)
 
 	// if huge pages are enabled, we report them as a schedulable resource on the node
 	for _, hugepagesInfo := range info.HugePages {
