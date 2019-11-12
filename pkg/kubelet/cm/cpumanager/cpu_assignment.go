@@ -146,7 +146,7 @@ func (a *cpuAccumulator) isFailed() bool {
 	return a.numCPUsNeeded > a.details.CPUs().Size()
 }
 
-func takeByTopology(topo *topology.CPUTopology, availableCPUs cpuset.CPUSet, numCPUs int) (cpuset.CPUSet, error) {
+func takeByTopology(topo *topology.CPUTopology, availableCPUs cpuset.CPUSet, numCPUs int, wantCores bool) (cpuset.CPUSet, error) {
 	acc := newCPUAccumulator(topo, availableCPUs, numCPUs)
 	if acc.isSatisfied() {
 		return acc.result, nil
@@ -158,7 +158,7 @@ func takeByTopology(topo *topology.CPUTopology, availableCPUs cpuset.CPUSet, num
 	// Algorithm: topology-aware best-fit
 	// 1. Acquire whole sockets, if available and the container requires at
 	//    least a socket's-worth of CPUs.
-	if acc.needs(acc.topo.CPUsPerSocket()) {
+	if acc.needs(acc.topo.CPUsPerSocket()) && !wantCores {
 		for _, s := range acc.freeSockets() {
 			klog.V(4).Infof("[cpumanager] takeByTopology: claiming socket [%d]", s)
 			acc.take(acc.details.CPUsInSockets(s))
@@ -173,7 +173,7 @@ func takeByTopology(topo *topology.CPUTopology, availableCPUs cpuset.CPUSet, num
 
 	// 2. Acquire whole cores, if available and the container requires at least
 	//    a core's-worth of CPUs.
-	if acc.needs(acc.topo.CPUsPerCore()) {
+	if acc.needs(acc.topo.CPUsPerCore()) && wantCores {
 		for _, c := range acc.freeCores() {
 			klog.V(4).Infof("[cpumanager] takeByTopology: claiming core [%d]", c)
 			acc.take(acc.details.CPUsInCores(c))

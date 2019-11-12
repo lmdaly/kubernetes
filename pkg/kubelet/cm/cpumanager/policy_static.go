@@ -96,7 +96,8 @@ func NewStaticPolicy(topology *topology.CPUTopology, numReservedCPUs int, affini
 	//
 	// For example: Given a system with 8 CPUs available and HT enabled,
 	// if numReservedCPUs=2, then reserved={0,4}
-	reserved, _ := takeByTopology(topology, allCPUs, numReservedCPUs)
+	wantCores := false
+	reserved, _ := takeByTopology(topology, allCPUs, numReservedCPUs, wantCores)
 
 	if reserved.Size() != numReservedCPUs {
 		panic(fmt.Sprintf("[cpumanager] unable to reserve the required amount of CPUs (size of %s did not equal %d)", reserved, numReservedCPUs))
@@ -191,9 +192,18 @@ func (p *staticPolicy) AddContainer(s state.State, pod *v1.Pod, container *v1.Co
 		}
 	}()
 
-	if numCPUs := p.guaranteedCPUs(pod, container); numCPUs != 0 {
+	numCPUs := p.guaranteedCPUs(pod, container)
+	numCores := p.getCores(pod, container)
+	wantCores := false
+	if numCPUs == 0 && numCores != 0 {
+		numCPUs = numCores * p.topology.CPUsPerCore()
+		wantCores = true
+	}
+
+	if numCPUs != 0 {
 		klog.Infof("[cpumanager] static policy: AddContainer (pod: %s, container: %s, container id: %s)", pod.Name, container.Name, containerID)
 		// container belongs in an exclusively allocated pool
+		klog.Infof("[cpumanager] static policy: Cores Requested: %v", numCores)
 
 		if _, ok := s.GetCPUSet(containerID); ok {
 			klog.Infof("[cpumanager] static policy: container already present in state, skipping (container: %s, container id: %s)", container.Name, containerID)
@@ -221,7 +231,7 @@ func (p *staticPolicy) AddContainer(s state.State, pod *v1.Pod, container *v1.Co
 		klog.Infof("[cpumanager] Pod %v, Container %v Topology Affinity is: %v", pod.UID, container.Name, hint)
 
 		// Allocate CPUs according to the NUMA affinity contained in the hint.
-		cpuset, err := p.allocateCPUs(s, numCPUs, hint.NUMANodeAffinity)
+		cpuset, err := p.allocateCPUs(s, numCPUs, wantCores, hint.NUMANodeAffinity)
 		if err != nil {
 			klog.Errorf("[cpumanager] unable to allocate %d CPUs (container id: %s, error: %v)", numCPUs, containerID, err)
 			return err
@@ -250,8 +260,8 @@ func (p *staticPolicy) RemoveContainer(s state.State, containerID string) (rerr 
 	return nil
 }
 
-func (p *staticPolicy) allocateCPUs(s state.State, numCPUs int, numaAffinity socketmask.SocketMask) (cpuset.CPUSet, error) {
-	klog.Infof("[cpumanager] allocateCpus: (numCPUs: %d, socket: %v)", numCPUs, numaAffinity)
+func (p *staticPolicy) allocateCPUs(s state.State, numCPUs int, wantCores bool, numaAffinity socketmask.SocketMask) (cpuset.CPUSet, error) {
+	klog.Infof("[cpumanager] allocateCpus: (numCPUs: %d, wantCores: %v, socket: %v)", numCPUs, wantCores, numaAffinity)
 
 	// If there are aligned CPUs in numaAffinity, attempt to take those first.
 	result := cpuset.NewCPUSet()
@@ -266,7 +276,7 @@ func (p *staticPolicy) allocateCPUs(s state.State, numCPUs int, numaAffinity soc
 			numAlignedToAlloc = numCPUs
 		}
 
-		alignedCPUs, err := takeByTopology(p.topology, alignedCPUs, numAlignedToAlloc)
+		alignedCPUs, err := takeByTopology(p.topology, alignedCPUs, numAlignedToAlloc, wantCores)
 		if err != nil {
 			return cpuset.NewCPUSet(), err
 		}
@@ -275,7 +285,7 @@ func (p *staticPolicy) allocateCPUs(s state.State, numCPUs int, numaAffinity soc
 	}
 
 	// Get any remaining CPUs from what's leftover after attempting to grab aligned ones.
-	remainingCPUs, err := takeByTopology(p.topology, p.assignableCPUs(s).Difference(result), numCPUs-result.Size())
+	remainingCPUs, err := takeByTopology(p.topology, p.assignableCPUs(s).Difference(result), numCPUs-result.Size(), wantCores)
 	if err != nil {
 		return cpuset.NewCPUSet(), err
 	}
@@ -300,4 +310,15 @@ func (p *staticPolicy) guaranteedCPUs(pod *v1.Pod, container *v1.Container) int 
 	// Per the language spec, `int` is guaranteed to be at least 32 bits wide.
 	// https://golang.org/ref/spec#Numeric_types
 	return int(cpuQuantity.Value())
+}
+
+func (p *staticPolicy) getCores(pod *v1.Pod, container *v1.Container) int {
+	if v1qos.GetPodQOS(pod) != v1.PodQOSGuaranteed {
+		return 0
+	}
+	coreQuantity := container.Resources.Requests[v1.ResourceCore]
+	if coreQuantity.Value()*1000 != coreQuantity.MilliValue() {
+		return 0
+	}
+	return int(coreQuantity.Value())
 }
