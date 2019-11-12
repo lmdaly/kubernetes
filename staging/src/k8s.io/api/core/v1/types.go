@@ -4556,6 +4556,7 @@ type ResourceName string
 // camel case, separating compound words.
 // Fully-qualified resource typenames are constructed from a DNS-style subdomain, followed by a slash `/` and a name.
 const (
+	ResourceCore ResourceName = "core"
 	// CPU, in cores. (500m = .5 cores)
 	ResourceCPU ResourceName = "cpu"
 	// Memory, in bytes. (500Gi = 500GiB = 500 * 1024 * 1024 * 1024)
@@ -5228,7 +5229,8 @@ const (
 	// ResourceServicesLoadBalancers, number
 	ResourceServicesLoadBalancers ResourceName = "services.loadbalancers"
 	// CPU request, in cores. (500m = .5 cores)
-	ResourceRequestsCPU ResourceName = "requests.cpu"
+	ResourceRequestsCPU  ResourceName = "requests.cpu"
+	ResourceRequestsCore ResourceName = "requests.core"
 	// Memory request, in bytes. (500Gi = 500GiB = 500 * 1024 * 1024 * 1024)
 	ResourceRequestsMemory ResourceName = "requests.memory"
 	// Storage request, in bytes
@@ -5236,7 +5238,8 @@ const (
 	// Local ephemeral storage request, in bytes. (500Gi = 500GiB = 500 * 1024 * 1024 * 1024)
 	ResourceRequestsEphemeralStorage ResourceName = "requests.ephemeral-storage"
 	// CPU limit, in cores. (500m = .5 cores)
-	ResourceLimitsCPU ResourceName = "limits.cpu"
+	ResourceLimitsCPU  ResourceName = "limits.cpu"
+	ResourceLimitsCore ResourceName = "limits.core"
 	// Memory limit, in bytes. (500Gi = 500GiB = 500 * 1024 * 1024 * 1024)
 	ResourceLimitsMemory ResourceName = "limits.memory"
 	// Local ephemeral storage limit, in bytes. (500Gi = 500GiB = 500 * 1024 * 1024 * 1024)

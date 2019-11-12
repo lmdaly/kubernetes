@@ -24,6 +24,14 @@ func (self ResourceName) String() string {
 	return string(self)
 }
 
+// Returns the Core limit if specified.
+func (self *ResourceList) Core() *resource.Quantity {
+	if val, ok := (*self)[ResourceCore]; ok {
+		return &val
+	}
+	return &resource.Quantity{Format: resource.DecimalSI}
+}
+
 // Returns the CPU limit if specified.
 func (self *ResourceList) Cpu() *resource.Quantity {
 	if val, ok := (*self)[ResourceCPU]; ok {
