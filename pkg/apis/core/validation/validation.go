@@ -5038,7 +5038,7 @@ func ValidateResourceRequirements(requirements *core.ResourceRequirements, fldPa
 	reqContainsCPUOrMemory := false
 	limContainsHugePages := false
 	reqContainsHugePages := false
-	supportedQoSComputeResources := sets.NewString(string(core.ResourceCPU), string(core.ResourceMemory))
+	supportedQoSComputeResources := sets.NewString(string(core.ResourceCore), string(core.ResourceCPU), string(core.ResourceMemory))
 	for resourceName, quantity := range requirements.Limits {
 
 		fldPath := limPath.Key(string(resourceName))

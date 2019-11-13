@@ -116,10 +116,13 @@ var podObjectCountQuotaResources = sets.NewString(
 )
 
 var podComputeQuotaResources = sets.NewString(
+	string(core.ResourceCore),
 	string(core.ResourceCPU),
 	string(core.ResourceMemory),
+	string(core.ResourceLimitsCore),
 	string(core.ResourceLimitsCPU),
 	string(core.ResourceLimitsMemory),
+	string(core.ResourceRequestsCore),
 	string(core.ResourceRequestsCPU),
 	string(core.ResourceRequestsMemory),
 )
@@ -137,6 +140,7 @@ func IsResourceQuotaScopeValidForResource(scope core.ResourceQuotaScope, resourc
 }
 
 var standardContainerResources = sets.NewString(
+	string(core.ResourceCore),
 	string(core.ResourceCPU),
 	string(core.ResourceMemory),
 	string(core.ResourceEphemeralStorage),
@@ -192,13 +196,16 @@ func IsStandardLimitRangeType(str string) bool {
 }
 
 var standardQuotaResources = sets.NewString(
+	string(core.ResourceCore),
 	string(core.ResourceCPU),
 	string(core.ResourceMemory),
 	string(core.ResourceEphemeralStorage),
+	string(core.ResourceRequestsCore),
 	string(core.ResourceRequestsCPU),
 	string(core.ResourceRequestsMemory),
 	string(core.ResourceRequestsStorage),
 	string(core.ResourceRequestsEphemeralStorage),
+	string(core.ResourceLimitsCore),
 	string(core.ResourceLimitsCPU),
 	string(core.ResourceLimitsMemory),
 	string(core.ResourceLimitsEphemeralStorage),
@@ -220,12 +227,15 @@ func IsStandardQuotaResourceName(str string) bool {
 }
 
 var standardResources = sets.NewString(
+	string(core.ResourceCore),
 	string(core.ResourceCPU),
 	string(core.ResourceMemory),
 	string(core.ResourceEphemeralStorage),
+	string(core.ResourceRequestsCore),
 	string(core.ResourceRequestsCPU),
 	string(core.ResourceRequestsMemory),
 	string(core.ResourceRequestsEphemeralStorage),
+	string(core.ResourceLimitsCore),
 	string(core.ResourceLimitsCPU),
 	string(core.ResourceLimitsMemory),
 	string(core.ResourceLimitsEphemeralStorage),

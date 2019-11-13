@@ -23,7 +23,7 @@ import (
 	"k8s.io/kubernetes/pkg/apis/core"
 )
 
-var supportedQoSComputeResources = sets.NewString(string(core.ResourceCPU), string(core.ResourceMemory))
+var supportedQoSComputeResources = sets.NewString(string(core.ResourceCore), string(core.ResourceCPU), string(core.ResourceMemory))
 
 // QOSList is a set of (resource name, QoS class) pairs.
 type QOSList map[v1.ResourceName]v1.PodQOSClass
@@ -77,8 +77,9 @@ func GetPodQOS(pod *v1.Pod) v1.PodQOSClass {
 				}
 			}
 		}
-
-		if !qosLimitsFound.HasAll(string(v1.ResourceMemory), string(v1.ResourceCPU)) {
+		if qosLimitsFound.Has(string(v1.ResourceMemory)) && (qosLimitsFound.Has(string(v1.ResourceCPU)) || qosLimitsFound.Has(string(v1.ResourceCore))) {
+			isGuaranteed = true
+		} else {
 			isGuaranteed = false
 		}
 	}
