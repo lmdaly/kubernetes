@@ -296,6 +296,7 @@ func TestTakeByTopology(t *testing.T) {
 		topo          *topology.CPUTopology
 		availableCPUs cpuset.CPUSet
 		numCPUs       int
+		wantCores     bool
 		expErr        string
 		expResult     cpuset.CPUSet
 	}{
@@ -304,6 +305,7 @@ func TestTakeByTopology(t *testing.T) {
 			topoSingleSocketHT,
 			cpuset.NewCPUSet(0, 2, 4, 6),
 			5,
+			false,
 			"not enough cpus available to satisfy request",
 			cpuset.NewCPUSet(),
 		},
@@ -312,6 +314,7 @@ func TestTakeByTopology(t *testing.T) {
 			topoSingleSocketHT,
 			cpuset.NewCPUSet(0, 1, 2, 3, 4, 5, 6, 7),
 			0,
+			false,
 			"",
 			cpuset.NewCPUSet(),
 		},
@@ -320,6 +323,7 @@ func TestTakeByTopology(t *testing.T) {
 			topoSingleSocketHT,
 			cpuset.NewCPUSet(0, 1, 2, 3, 4, 5, 6, 7),
 			1,
+			false,
 			"",
 			cpuset.NewCPUSet(0),
 		},
@@ -328,6 +332,7 @@ func TestTakeByTopology(t *testing.T) {
 			topoSingleSocketHT,
 			cpuset.NewCPUSet(1, 3, 5, 6, 7),
 			1,
+			false,
 			"",
 			cpuset.NewCPUSet(6),
 		},
@@ -336,6 +341,7 @@ func TestTakeByTopology(t *testing.T) {
 			topoSingleSocketHT,
 			cpuset.NewCPUSet(0, 1, 2, 3, 4, 5, 6, 7),
 			2,
+			false,
 			"",
 			cpuset.NewCPUSet(0, 4),
 		},
@@ -344,6 +350,7 @@ func TestTakeByTopology(t *testing.T) {
 			topoSingleSocketHT,
 			cpuset.NewCPUSet(0, 1, 2, 3, 4, 5, 6, 7),
 			8,
+			false,
 			"",
 			cpuset.NewCPUSet(0, 1, 2, 3, 4, 5, 6, 7),
 		},
@@ -352,6 +359,7 @@ func TestTakeByTopology(t *testing.T) {
 			topoSingleSocketHT,
 			cpuset.NewCPUSet(0, 1, 2, 3, 6),
 			2,
+			false,
 			"",
 			cpuset.NewCPUSet(2, 6),
 		},
@@ -360,6 +368,7 @@ func TestTakeByTopology(t *testing.T) {
 			topoDualSocketHT,
 			cpuset.NewCPUSet(1, 2, 3, 4, 5, 7, 8, 9, 10, 11),
 			1,
+			false,
 			"",
 			cpuset.NewCPUSet(2),
 		},
@@ -368,13 +377,32 @@ func TestTakeByTopology(t *testing.T) {
 			topoDualSocketHT,
 			cpuset.NewCPUSet(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11),
 			6,
+			false,
 			"",
 			cpuset.NewCPUSet(0, 2, 4, 6, 8, 10),
+		},
+		{
+			"take 4 cpus from dual socket with HT - wantCores = true",
+			topoDualSocketHT,
+			cpuset.NewCPUSet(0, 1, 2, 3, 4),
+			4,
+			true,
+			"failed to allocate cpus on full cores",
+			cpuset.NewCPUSet(),
+		},
+		{
+			"take 4 cpus from dual socket with HT - wantCores = false",
+			topoDualSocketHT,
+			cpuset.NewCPUSet(0, 1, 2, 3, 4),
+			4,
+			false,
+			"",
+			cpuset.NewCPUSet(0, 1, 2, 3),
 		},
 	}
 
 	for _, tc := range testCases {
-		result, err := takeByTopology(tc.topo, tc.availableCPUs, tc.numCPUs)
+		result, err := takeByTopology(tc.topo, tc.availableCPUs, tc.numCPUs, tc.wantCores)
 		if tc.expErr != "" && err.Error() != tc.expErr {
 			t.Errorf("expected error to be [%v] but it was [%v] in test \"%s\"", tc.expErr, err, tc.description)
 		}

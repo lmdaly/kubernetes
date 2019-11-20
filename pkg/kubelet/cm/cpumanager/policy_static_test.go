@@ -815,7 +815,7 @@ func TestTopologyAwareAllocateCPUs(t *testing.T) {
 		}
 		policy.Start(st)
 
-		cset, err := policy.allocateCPUs(st, tc.numRequested, tc.socketMask)
+		cset, err := policy.allocateCPUs(st, tc.numRequested, false, tc.socketMask)
 		if err != nil {
 			t.Errorf("StaticPolicy allocateCPUs() error (%v). expected CPUSet %v not error %v",
 				tc.description, tc.expCSet, err)

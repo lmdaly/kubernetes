@@ -158,7 +158,7 @@ func takeByTopology(topo *topology.CPUTopology, availableCPUs cpuset.CPUSet, num
 	// Algorithm: topology-aware best-fit
 	// 1. Acquire whole sockets, if available and the container requires at
 	//    least a socket's-worth of CPUs.
-	if acc.needs(acc.topo.CPUsPerSocket()) && !wantCores {
+	if acc.needs(acc.topo.CPUsPerSocket()) {
 		for _, s := range acc.freeSockets() {
 			klog.V(4).Infof("[cpumanager] takeByTopology: claiming socket [%d]", s)
 			acc.take(acc.details.CPUsInSockets(s))
@@ -173,7 +173,7 @@ func takeByTopology(topo *topology.CPUTopology, availableCPUs cpuset.CPUSet, num
 
 	// 2. Acquire whole cores, if available and the container requires at least
 	//    a core's-worth of CPUs.
-	if acc.needs(acc.topo.CPUsPerCore()) && wantCores {
+	if acc.needs(acc.topo.CPUsPerCore()) {
 		for _, c := range acc.freeCores() {
 			klog.V(4).Infof("[cpumanager] takeByTopology: claiming core [%d]", c)
 			acc.take(acc.details.CPUsInCores(c))
@@ -183,6 +183,9 @@ func takeByTopology(topo *topology.CPUTopology, availableCPUs cpuset.CPUSet, num
 			if !acc.needs(acc.topo.CPUsPerCore()) {
 				break
 			}
+		}
+		if acc.needs(acc.topo.CPUsPerCore()) && wantCores {
+			return cpuset.NewCPUSet(), fmt.Errorf("failed to allocate cpus on full cores")
 		}
 	}
 
